@@ -3,16 +3,8 @@ AMfeti - FETI Research Code at the Chair of Applied Mechanics
 
 (c) 2020 Lehrstuhl für Angewandte Mechanik, Technische Universität München
 
-<script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
-
 # AMfeti
 AMfeti is a Python Library to solve and implement parallel FETI-Like solvers using mpi4py.
-
-Coverage Report:
-[![coverage report](https://gitlab.lrz.de/AM/amfeti/badges/master/coverage.svg)](https://gitlab.lrz.de/AM/amfeti/commits/master)
-
-Pipeline Status:
-[![pipeline status](https://gitlab.lrz.de/AM/amfeti/badges/master/pipeline.svg)](https://gitlab.lrz.de/AM/amfeti/commits/master)
 
 
 Overview:

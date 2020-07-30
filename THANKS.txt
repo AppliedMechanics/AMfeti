@@ -1,0 +1,11 @@
+AMfeti is an open source project maintained by the Chair of Applied Mechanics at Technical University Munich
+Many people (researchers and students) have contributed to this project.
+They are listed below. If your are missing, please mail the maintainer andreas.seibold@tum.de
+
+Main Developers:
+Guilherme Jenovencio
+Andreas Seibold
+
+We thank the following contributors:
+
+

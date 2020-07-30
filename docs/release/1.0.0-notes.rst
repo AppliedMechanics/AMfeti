@@ -1,0 +1,114 @@
+==========================
+AMfeti 1.0.0 Release Notes
+==========================
+
+
+Highlights of this release
+--------------------------
+
+The AMfeti package is totally based on PyFETI originally developed by Guilherme Jenovencio. After an extensive
+refactoring it evolved to the new AMfeti package. PyFETI provides an open-source FETI-package with everything, needed to
+solve a system, decomposed into several subdomains, with a FETI-method either in a serial iterative or parallel mannor.
+With the new refactoring, the overall structure of AMfeti became more decoupled into several subpackages and is
+therefore much more flexible for sustainable development. Moreover the refactoring aimed to apply the same style-guide,
+as adopted in our AMfe-package.
+
+New features
+============
+
+amfeti.coarse_grid improvements
+-------------------------------
+
+- Added separate module for natural coarse grid and projection
+
+
+amfeti.config_base improvements
+-------------------------
+
+- Generalized configuration-management in ConfigBase-class
+
+
+amfeti.feti_solvers improvements
+--------------------------------
+
+- Created linear static FETI-solver for linear non-time-dependent problems
+- Created nonlinear static FETI-solver for nonlinear non-time-dependent problems
+- Created linear dynamic FETI-solver for linear time-dependent problems
+- Created nonlinear dynamic FETI-solver for nonlinear time-dependent problems
+
+
+amfeti.local_problems improvements
+----------------------------------
+
+- Established a new structure for local problems originating from a basic local problem. This way several types of
+  local problems can be created in the future.
+- Linear static local problem has a preconditioner- and scaling-object
+- Added nonlinear local problem
+- Added linear dynamic local problem
+- Added base-class for integrator-class that is required by dynamic local problems
+- Added nonlinear dynamic local problem
+
+
+amfeti.nonlinear_solvers improvements
+-------------------------------------
+
+- Added NewtonRaphson nonlinear solver as a general nonlinear solver
+
+
+amfeti.parallelization_managers improvements
+--------------------------------------------
+
+- Created Manager-modules for parallel MPI-solvers
+- Created local MPI-processor
+- MPI-system supports free configurable distribution of local problems among available MPI-ranks
+
+
+amfeti.preconditioner improvements
+----------------------------------
+
+- Moved out preconditioner-module, such that the src-folder can become obsolete
+
+
+amfeti.scaling improvements
+---------------------------
+
+- Created new scaling-module and outsourced Multiplicity-scaling from the local problem. This way new scaling-types can
+  be implemented easily
+
+
+amfeti.solver_managers improvements
+-----------------------------------
+
+- Refactored serial solver-manager
+- Added parallel solver-manager
+
+
+amfeti.solvers improvements
+---------------------------
+
+- Created new class-based solver-structure for solvers of global problems
+- PCPG refactored
+- PCPG supports full reorthogonalization
+- Added GMRES
+
+
+amfeti.tools improvements
+-------------------------
+
+- Added methods to invert dictionaries
+- Added method to get path to amfeti-folder
+
+
+Deprecated features
+===================
+
+
+Backwards incompatible changes
+==============================
+
+
+Other changes
+=============
+
+- Separated tests from processing-modules
+- Added integration-tests

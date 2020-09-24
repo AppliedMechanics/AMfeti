@@ -1,0 +1,9 @@
+python_version>='3.7'
+scipy>=1.1.0
+dill
+mpi4py
+sphinx
+sphinx_rtd_theme
+numdifftools
+numpydoc
+numpy

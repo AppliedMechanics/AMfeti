@@ -62,7 +62,7 @@ class LinearStaticLocalProblem(LocalProblemBase):
         """
         super().__init__(global_id)
         self.dimension = K.shape[0]
-        self._config_dict = {'pseudoinverse_config': {'method': 'svd',
+        self._config_dict = {'pseudoinverse_config': {'method': 'splusps',
                                                       'tolerance': 1e-8},
                              'preconditioner': None,
                              'scaling': None}

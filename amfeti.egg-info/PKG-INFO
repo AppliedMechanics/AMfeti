@@ -1,0 +1,13 @@
+Metadata-Version: 1.2
+Name: amfeti
+Version: 1.0.0
+Summary: 'Python FETI standalone library.'
+Home-page: 'https://gitlab.lrz.de/AM/amfeti'
+Author: 'Andreas Seibold'
+Author-email: 'andreas.seibold@tum.de'
+Maintainer: 'Andreas Seibold',
+Maintainer-email: 'andreas.seibold@tum.de'
+License: 'BSD3-License'
+Description: 'Python FETI standalone library which provides data structures to solve linear problems with '
+        'dual Domain Decompositon methods'
+Platform: UNKNOWN

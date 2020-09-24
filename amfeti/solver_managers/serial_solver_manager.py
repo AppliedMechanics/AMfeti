@@ -109,17 +109,13 @@ class SerialSolverManager(SolverManagerBase):
 
         for problem_id, local_problem in self._local_problems_dict.items():
             BR_int_dict = dict()
-            if local_problem.kernel.size == 0:
-                for interface, B in local_problem.B.items():
-                    BR_int_dict[interface] = np.array([])
-            else:
-                for interface, B in local_problem.B.items():
-                    BR_int_dict[interface] = B @ local_problem.kernel
+            for interface, B in local_problem.B.items():
+                BR_int_dict[interface] = np.array([])
+
             BR_dict[problem_id] = BR_int_dict
-            if local_problem.kernel.size == 0:
-                RTf_dict[problem_id] = np.array([])
-            else:
-                RTf_dict[problem_id] = local_problem.kernel.T @ local_problem.f
+
+            RTf_dict[problem_id] = np.array([])
+            
             for interface, B in local_problem.B.items():
                 if interface not in self._interface2dof_map:
                     new_global_dof_dimension = self._global_dof_dimension + B.shape[0]

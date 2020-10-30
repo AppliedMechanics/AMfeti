@@ -17,7 +17,7 @@ from amfeti.scaling import MultiplicityScaling
 from amfeti.nonlinear_solvers import LoadSteppingControl
 import numpy as np
 import logging
-
+import copy
 
 __all__ = ['LinearStaticFetiSolver',
            'NonlinearStaticFetiSolver']
@@ -80,8 +80,8 @@ class LinearStaticFetiSolver(FetiSolverBase):
         for problem_id, K in self._config_dict['K_dict'].items():
             self._local_problems[problem_id] = LinearStaticLocalProblem(problem_id, K, B_dict[problem_id],
                                                                         f_dict[problem_id])
-            self._local_problems[problem_id].set_config({'preconditioner': copy(self._config_dict['preconditioner']),
-                                                         'scaling': copy(self._config_dict['scaling'])})
+            self._local_problems[problem_id].set_config({'preconditioner': DirichletPreconditioner(),
+                                                         'scaling': MultiplicityScaling()})
             self._local_problems[problem_id].update_preconditioner_and_scaling()
 
     def solve(self):

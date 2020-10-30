@@ -1,0 +1,64 @@
+INFO:__main__:Running local MPI program...
+INFO:__main__:Running local MPI program...
+INFO:__main__:Running local MPI program...
+INFO:__main__:########################################
+INFO:__main__:########################################
+INFO:__main__:MPI rank 2
+INFO:__main__:MPI rank 1
+INFO:__main__:Directory pass to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp
+INFO:__main__:Directory pass to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp
+INFO:__main__:########################################
+INFO:__main__:########################################
+INFO:__main__:Running local MPI program...
+INFO:__main__:########################################
+INFO:__main__:Local object name passed to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp/mpi_rank_2.pkl
+INFO:__main__:Local object name passed to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp/mpi_rank_1.pkl
+INFO:__main__:MPI rank 0
+INFO:__main__:Directory pass to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp
+INFO:__main__:########################################
+INFO:__main__:########################################
+INFO:__main__:MPI rank 3
+INFO:__main__:Local object name passed to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp/mpi_rank_0.pkl
+INFO:__main__:Directory pass to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp
+INFO:__main__:########################################
+INFO:__main__:Local object name passed to MPI solver = /home/aseibold/Coding/AMfeti/tests/integration_tests/tmp/tmp/mpi_rank_3.pkl
+INFO:amfeti.solver_managers.local_solver_manager:Updating local solver manager
+INFO:amfeti.solver_managers.local_solver_manager:Updating local solver manager
+INFO:amfeti.solver_managers.local_solver_manager:Updating local solver manager
+INFO:amfeti.solver_managers.local_solver_manager:Updating local solver manager
+INFO:amfeti.solvers.global_solvers:Setting PCPG tolerance = 1.00e-07
+INFO:amfeti.solvers.global_solvers:Setting PCPG tolerance = 1.00e-07
+INFO:amfeti.solvers.global_solvers:Setting PCPG max number of iterations = 49
+INFO:amfeti.solvers.global_solvers:Setting PCPG max number of iterations = 49
+INFO:amfeti.solvers.global_solvers:Setting PCPG tolerance = 1.00e-07
+INFO:amfeti.solvers.global_solvers:Setting PCPG tolerance = 1.00e-07
+INFO:amfeti.solvers.global_solvers:Setting PCPG max number of iterations = 49
+INFO:amfeti.solvers.global_solvers:Setting PCPG max number of iterations = 49
+INFO:amfeti.solvers.global_solvers:PCPG has converged after 1
+INFO:amfeti.solvers.global_solvers:PCPG has converged after 1
+INFO:amfeti.solvers.global_solvers:PCPG has converged after 1
+INFO:amfeti.solvers.global_solvers:PCPG has converged after 1
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:{"Total_elaspsed_time_PCPG" : 0.02} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:{"Total_elaspsed_time_PCPG" : 0.02} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:{"Total_elaspsed_time_PCPG" : 0.02} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:{"Total_elaspsed_time_PCPG" : 0.02} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:Number of PCPG Iterations = 1 !
+INFO:amfeti.solvers.global_solvers:Number of PCPG Iterations = 1 !
+INFO:amfeti.solvers.global_solvers:Number of PCPG Iterations = 1 !
+INFO:amfeti.solvers.global_solvers:Number of PCPG Iterations = 1 !
+INFO:amfeti.solvers.global_solvers:{"avg_iteration_time_PCPG" : 0.0246} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:{"avg_iteration_time_PCPG" : 0.0246} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:{"avg_iteration_time_PCPG" : 0.0247} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:{"avg_iteration_time_PCPG" : 0.0247} # Elapsed time [s]
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:amfeti.solvers.global_solvers:############################################################
+INFO:__main__:########################################
+INFO:__main__:########################################
+INFO:__main__:########################################
+INFO:__main__:########################################

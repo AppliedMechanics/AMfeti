@@ -260,6 +260,10 @@ class Matrix:
     def update_name(self):
         self.name = self.prefix + str(self.id)
 
+    def compute_psudeoinverse(self):
+        self.psudeoinverve.compute(self.data)
+        self.inverse_computed = True
+
     @property
     def shape(self):
         return self.data.shape

@@ -16,8 +16,7 @@ import logging
 from copy import copy
 
 __all__ = [
-    'LinearStaticLocalProblem',
-    'NonlinearStaticLocalProblem'
+    'LinearDynamicLocalProblemFRF'
 ]
 
 
@@ -45,7 +44,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
     _config_dict : dict
         dictionary with all configuration-information
     """
-    def __init__(self, global_id, Z, K, B, f, **kwargs):
+    def __init__(self, global_id, K, M, B, f, **kwargs):
         """
         Parameters
         ----------
@@ -61,25 +60,25 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
             optional configuration
         """
         super().__init__(global_id)
-        self.dimension = Z.shape[0]
+        self.dimension = K.shape[0]
         self._config_dict = {'pseudoinverse_config': {'method': 'svd',
                                                       'tolerance': 1e-10},
                              'preconditioner': None,
                              'scaling': None}
         self.set_config(kwargs)
 
-        if isinstance(Z, Matrix):
-            self.Z = Z
-        else:
-            self.Z = Matrix(Z, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
-
         if isinstance(K, Matrix):
             self.K = K
         else:
             self.K = Matrix(K, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
 
+        if isinstance(K, Matrix):
+            self.Z = K
+        else:
+            self.Z = Matrix(K, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
 
 
+        self.M = M
         self.f = f
         self.B = dict()
         for interface, B_mat in B.items():
@@ -149,9 +148,8 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         if isinstance(Z, Matrix):
             self.Z = Z
         else:
-            #self.Z = Matrix(Z, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
-            self.Z.data = Z
-            self.Z.inverse_computed = False
+            self.Z = Matrix(Z, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
+            self.Z.compute_psudeoinverse()
 
     def update_preconditioner_and_scaling(self):
         """
@@ -170,7 +168,8 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         if self.scaling is None:
             self.scaling = self._config_dict['scaling']
         if self.preconditioner is not None and self.scaling is not None:
-            self.preconditioner.update(self.Z, self._interface_dofs)
+            if self._config_dict['preconditioner_matrix'] == 'stiffness':
+               self.preconditioner.update(self.K, self._interface_dofs)
             self.scaling.update(self.B)
         else:
             logger = logging.getLogger(__name__)

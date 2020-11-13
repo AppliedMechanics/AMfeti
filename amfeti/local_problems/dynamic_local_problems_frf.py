@@ -221,12 +221,13 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         external_solution_dict_scaled : dict
             preconditioned external solutions on the interfaces
         """
+        q_b_dict_scaled = self.scaling.apply(q_b_dict)
+
         if self.preconditioner is None:
-            external_solution_dict_scaled = q_b_dict
+            external_solution_dict_scaled = q_b_dict_scaled
         else:
-            u_b_dict_scaled = self.scaling.apply(q_b_dict)
-            u_b_expanded = self._expand_external_solution(u_b_dict_scaled)
-            external_solution = self.preconditioner.apply(u_b_expanded)
+            q_b_expanded = self._expand_external_solution(q_b_dict_scaled)
+            external_solution = self.preconditioner.apply(q_b_expanded)
             external_solution_dict = self._distribute_to_interfaces(external_solution)
             external_solution_dict_scaled = self.scaling.apply(external_solution_dict)
 

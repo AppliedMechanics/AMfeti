@@ -132,31 +132,25 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
         """
         M_dict = self._config_dict['M_dict']
         K_dict = self._config_dict['K_dict']
+        alphaK = self._config_dict['damping_coefficient']['alpha']
+        betaM = self._config_dict['damping_coefficient']['beta']
         solution_dict =  dict()
-        buildZ = lambda w, M, K, alpha=0.00005, beta=0.000001: -w ** 2 * M + K + 1J * w * (alpha * K + beta * M)
+        buildZ = lambda w, M, K, alpha, beta: -(w * w * M) + K + (1J * w * (alpha * K + beta * M))
         def build_Z_dict(w, M_dict, K_dict, alpha=0.0000001, beta=0.0001):
             Z_dict = {}
             for key, K in K_dict.items():
                 Z_dict[key] = buildZ(w, M_dict[key], K, alpha, beta)
             return Z_dict
         w_list = self._config_dict['frequency']
-        for i in range(2 * len(w_list)):
-            w = w_list[i]
-            Z_dict_ = build_Z_dict(w, M_dict, K_dict)
+        for omega in (w_list):
+            Z_dict_ = build_Z_dict(omega, M_dict, K_dict,alphaK,betaM)
             self.set_config({'Z_dict': Z_dict_})
             self._update_local_problems()
             self._solver_manager.update()
             self._solver_manager.solve()
-            solution_dict[w] = deepcopy(self._solver_manager.solution)
+            solution_dict[omega] = deepcopy(self._solver_manager.solution)
             print("Frequency = %d : GMRES iteration %d"
-                  %( w,solution_dict[w].solver_information['GMRES_iterations'] ))
-
-            if solution_dict[w].solver_information['GMRES_iterations'] <190:
-                self.update_preconditioner = False
-            else:
-                self.update_preconditioner = True
-            if w == w_list[-1]:
-                break
+                  %( omega,solution_dict[omega].solver_information['GMRES_iterations'] ))
         return solution_dict
     
  

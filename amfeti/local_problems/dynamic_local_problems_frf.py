@@ -235,7 +235,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
     def _local_right_hand_side(self, external_solution_dict, external_force_bool):
         if not external_force_bool:
-            f = np.zeros_like(self.f)
+            f = np.zeros_like(self.f,dtype=complex)
         else:
             f = np.copy(self.f)
 
@@ -260,7 +260,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         """
         lamda = None
         if external_solution_dict is not None:
-            lamda = np.zeros(self.dimension)
+            lamda = np.zeros(self.dimension,dtype=complex)
             for interface_id, B in self.B.items():
                 lamda = lamda + B.T.dot(external_solution_dict[interface_id])
         return lamda

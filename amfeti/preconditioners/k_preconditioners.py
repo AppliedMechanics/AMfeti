@@ -101,7 +101,7 @@ class DirichletPreconditioner(LumpedPreconditioner):
         return cal_schur_complement(self.K_bi, self.K_ii, self.K_ib, self.K_bb)
 
     def _set_Q(self):
-        self.Q = csr_matrix(np.zeros(self.K.data.shape))
+        self.Q = csr_matrix(np.zeros(self.K.data.shape),dtype=complex)
         S = self.schur_complement()
 
         self.Q[np.ix_(self.interface_dofs, self.interface_dofs)] = S

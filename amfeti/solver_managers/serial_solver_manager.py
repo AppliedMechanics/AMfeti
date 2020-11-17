@@ -193,7 +193,7 @@ class SerialSolverManager(SolverManagerBase):
         """
         lambda_sol = self._coarse_grid.solve()
         if lambda_sol is None:
-            lambda_sol = np.zeros(self._global_dof_dimension)
+            lambda_sol = np.zeros(self._global_dof_dimension,dtype=complex)
         return lambda_sol
 
     def _residual(self, v):
@@ -252,8 +252,8 @@ class SerialSolverManager(SolverManagerBase):
         for interface_id, u_dict_interface in u_dict.items():
             for problem_id, u_b in u_dict_interface.items():
                 if interface_id not in gap_dict:
-                    gap_dict[interface_id] = np.zeros_like(u_b)
-                gap_dict[interface_id] += u_b
+                    gap_dict[interface_id] = np.zeros_like(u_b,dtype=complex)
+                gap_dict[interface_id] = gap_dict[interface_id] + u_b
 
         d = self._interfacedict2vector(gap_dict)
         return -d
@@ -312,18 +312,18 @@ class SerialSolverManager(SolverManagerBase):
             if vector is None:
                 if issparse(value):
                     if value.ndim is 1:
-                        vector = csr_matrix(self._global_dof_dimension)
+                        vector = csr_matrix(self._global_dof_dimension,dtype=complex)
                     else:
                         vector = csr_matrix((self._global_dof_dimension, value.shape[1]))
                 else:
                     if value.ndim is 1:
-                        vector = np.zeros(self._global_dof_dimension)
+                        vector = np.zeros(self._global_dof_dimension,dtype=complex)
                     else:
                         vector = np.zeros((self._global_dof_dimension, value.shape[1]))
             if value.ndim is 1:
                 vector[self._interface2dof_map[interface]] = value
             else:
-                vector[self._interface2dof_map[interface], :] = value
+                vector[self._interface2dof_map[interface], :] = np.copy(value)
         return vector
 
     def _vector2interfacedict(self, v):

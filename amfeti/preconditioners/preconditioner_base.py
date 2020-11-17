@@ -55,7 +55,7 @@ class PreconditionerBase:
             current local ids of dofs, that are part of the subdomain's interfaces
         """
         self.K = K
-        self.Q = csr_matrix(np.zeros_like(self.K))
+        self.Q = csr_matrix(np.zeros_like(self.K),dtype=complex)
         self.interface_dofs = interface_dofs
         self.interior_dofs = self._identify_interior_dofs(self.interface_dofs)
         self._set_Q()

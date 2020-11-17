@@ -259,9 +259,9 @@ class GMRESsolver(PCPGsolver):
         lambda_hist = np.array([])
 
         V = dict()
-        H = csr_matrix(np.zeros((2, 1)))
+        H = csr_matrix(np.zeros((2, 1)),dtype=complex)
 
-        lambda_sol = np.zeros_like(lambda_init)
+        lambda_sol = np.zeros_like(lambda_init,dtype=complex)
         rk = residual_callback(lambda_init)
         residual_0 = copy(rk)
         lambda_0 = copy(lambda_init)
@@ -309,7 +309,7 @@ class GMRESsolver(PCPGsolver):
 
             H = csr_matrix(H)
             for i in range(k+1):
-                hik = np.dot(vk.T, V[i])
+                hik = np.vdot(vk.T, V[i])
                 H[i, k] = hik
                 vk -= hik * V[i]
 

@@ -253,7 +253,7 @@ class SerialSolverManager(SolverManagerBase):
             for problem_id, u_b in u_dict_interface.items():
                 if interface_id not in gap_dict:
                     gap_dict[interface_id] = np.zeros_like(u_b,dtype=complex)
-                gap_dict[interface_id] = gap_dict[interface_id] + u_b
+                gap_dict[interface_id] += u_b
 
         d = self._interfacedict2vector(gap_dict)
         return -d
@@ -323,7 +323,7 @@ class SerialSolverManager(SolverManagerBase):
             if value.ndim is 1:
                 vector[self._interface2dof_map[interface]] = value
             else:
-                vector[self._interface2dof_map[interface], :] = np.copy(value)
+                vector[self._interface2dof_map[interface], :] = value
         return vector
 
     def _vector2interfacedict(self, v):

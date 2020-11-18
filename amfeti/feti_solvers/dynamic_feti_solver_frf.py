@@ -151,6 +151,7 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
             solution_dict[omega] = deepcopy(self._solver_manager.solution)
             print("Frequency = %d : GMRES iteration %d"
                   %( omega,solution_dict[omega].solver_information['GMRES_iterations'] ))
+        print('Solve done')      
         return solution_dict
     
  

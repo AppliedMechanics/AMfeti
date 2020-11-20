@@ -10,7 +10,8 @@ Scaling module for the preconditioning-step of AMfeti
 import numpy as np
 from scipy.sparse import diags
 
-__all__ = ['MultiplicityScaling']
+__all__ = ['MultiplicityScaling',
+           'SquarerootMultiplicityScaling']
 
 
 class ScalingBase:
@@ -94,3 +95,36 @@ class MultiplicityScaling(ScalingBase):
 
         for key, B in B_dict.items():
             self.scaling_dict[key] = diags(1.0 / scaling_values[B.indices])
+
+class SquarerootMultiplicityScaling(ScalingBase):
+    """
+    Multiplicity-Scaling, that scales the interface-quantities based on the square root number of gaps belonging 
+    to each local degree of freedom    
+    """
+    def __init__(self):
+        super().__init__()
+
+    def update(self, B_dict):
+        """
+        Updating-method for Multiplicity-scaling, that extracts the multiplicity-factors for each interface-gap from the
+        local B-matrices
+
+        Parameters
+        ----------
+        B_dict : dict
+            B-matrices of each interface
+
+        Returns
+        -------
+        None
+        """
+        self.scaling_dict = dict()
+        scaling_values = None
+        for key, B in B_dict.items():
+            if scaling_values is None:
+                scaling_values = np.ones(B.shape[1])
+
+            scaling_values[B.indices] += 1
+
+        for key, B in B_dict.items():
+            self.scaling_dict[key] = diags(1.0 / np.sqrt(scaling_values[B.indices]))

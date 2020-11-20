@@ -13,7 +13,7 @@ from .feti_solver_base import FetiSolverBase
 from amfeti.local_problems.dynamic_local_problems_frf import LinearDynamicLocalProblemFRF
 from amfeti.solvers import PCPGsolver
 from amfeti.preconditioners import DirichletPreconditioner, LumpedPreconditioner
-from amfeti.scaling import MultiplicityScaling
+from amfeti.scaling import MultiplicityScaling, SquarerootMultiplicityScaling
 from amfeti.nonlinear_solvers import LoadSteppingControl
 import numpy as np
 import logging

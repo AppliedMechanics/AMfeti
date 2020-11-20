@@ -221,11 +221,11 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         external_solution_dict_scaled : dict
             preconditioned external solutions on the interfaces
         """
-        q_b_dict_scaled = self.scaling.apply(q_b_dict)
-
         if self.preconditioner is None:
+            q_b_dict_scaled = self._apply_halfscaling(copy(q_b_dict))
             external_solution_dict_scaled = q_b_dict_scaled
         else:
+            q_b_dict_scaled = self.scaling.apply(copy(q_b_dict))
             q_b_expanded = self._expand_external_solution(q_b_dict_scaled)
             external_solution = self.preconditioner.apply(q_b_expanded)
             external_solution_dict = self._distribute_to_interfaces(external_solution)
@@ -308,6 +308,10 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
         return interface_dofs, interior_dofs
 
-
+    def _apply_halfscaling(self,q_b_dict):
+        external_solution_dict = {}
+        for interface_id, B in self.B.items():
+            external_solution_dict[interface_id] = np.divide(q_b_dict[interface_id],2)
+        return external_solution_dict
 
 

@@ -138,6 +138,8 @@ class SerialSolverManager(SolverManagerBase):
         """
         config_dict = {'projection': self._coarse_grid.project,
                        'precondition': self._apply_preconditioner}
+                       # 'precondition': self._apply_multi_preconditioner}
+                       # 'multiprecondition': self._apply_multi_preconditioner }
         lambda_rigid = self.initialize_lambda()
 
         self.solver.set_config(config_dict)
@@ -239,24 +241,58 @@ class SerialSolverManager(SolverManagerBase):
         """
         v_dict = self._vector2interfacedict(v)
         u_dict = {}
+        d = np.zeros_like(v, dtype = complex)
         for problem_id, local_problem in self._local_problems_dict.items():
             u_dict_local = local_problem.solve(v_dict, external_force)
-            for interface, u_b in u_dict_local.items():
-                if interface not in u_dict:
-                    u_dict[interface] = {problem_id: u_b}
-                else:
-                    u_dict[interface].update({problem_id: u_b})
-
+            # for interface, u_b in u_dict_local.items():
+            #     if interface not in u_dict:
+            #         u_dict[interface] = {problem_id: u_b}
+            #     else:
+            #         u_dict[interface].update({problem_id: u_b})
+            d = d+ self._interfacedict2vector(u_dict_local)
         # compute gap
-        gap_dict = {}
-        for interface_id, u_dict_interface in u_dict.items():
-            for problem_id, u_b in u_dict_interface.items():
-                if interface_id not in gap_dict:
-                    gap_dict[interface_id] = np.zeros_like(u_b,dtype=complex)
-                gap_dict[interface_id] += u_b
+        # gap_dict = {}
+        # for interface_id, u_dict_interface in u_dict.items():
+        #
+        #     if interface_id.ndim == 1:
+        #
+        #         for problem_id, u_b in u_dict_interface.items():
+        #             if interface_id not in gap_dict:
+        #                 gap_dict[interface_id] = np.zeros_like(u_b,dtype=complex)
+        #                 gap_dict[interface_id] += u_b
+        #     else:
+        #         for problem_id, u_b in u_dict_interface.items():
+        #             if interface_id not in gap_dict:
+        #                 for nRHS in range(2):
+        #                     gap_dict[interface_id][:,nRHS] = np.zeros_like(u_b,dtype=complex)
+        #                     gap_dict[interface_id][:,nRHS] += u_b
 
-        d = self._interfacedict2vector(gap_dict)
+
+
+
+
+
+
+        # for problem_id, local_problem in self._local_problems_dict.items():
+        #     u_dict_local = local_problem.solve(v_dict, external_force)
+        #     for interface, u_b in u_dict_local.items():
+        #         if interface not in u_dict:
+        #             u_dict[interface] = {problem_id: u_b}
+        #         else:
+        #             u_dict[interface].update({problem_id: u_b})
+        #     # d = d + self._interfacedict2vector(u_dict_local)
+        # # compute gap
+        # gap_dict = {}
+        # for interface_id, u_dict_interface in u_dict.items():
+        #     for problem_id, u_b in u_dict_interface.items():
+        #         if interface_id not in gap_dict:
+        #             gap_dict[interface_id] = np.zeros_like(u_b,dtype=complex)
+        #         gap_dict[interface_id] += u_b
+        # d2 = self._interfacedict2vector(gap_dict)
+
         return -d
+
+
 
     def _apply_preconditioner(self, v):
         """
@@ -293,6 +329,35 @@ class SerialSolverManager(SolverManagerBase):
         f = self._interfacedict2vector(lambda_dict)
         return f
 
+
+
+
+
+
+    def _apply_multi_preconditioner(self, v):
+        """
+        Application of the local preconditioners to a given vector
+
+        Parameters
+        ----------
+        v : ndarray
+            global vector (in structural mechanics often viewed as gaps)
+
+        Returns
+        -------
+        f : ndarray
+            preconditioned dual solution
+        """
+        v_dict = self._vector2interfacedict(v)
+        f_dict = {}
+        f = np.zeros((len(v),self._local_problems_dict.__len__()), dtype= complex)
+        icounter = 0
+        f_dict_local = {}
+        for problem_id, local_problem in self._local_problems_dict.items():
+            f_dict_local = local_problem.precondition(v_dict)
+            f[:,problem_id-1] = self._interfacedict2vector(f_dict_local)
+        return f
+
     def _interfacedict2vector(self, intdict):
         """
         Assembles interface-quantities to a global vector
@@ -314,12 +379,12 @@ class SerialSolverManager(SolverManagerBase):
                     if value.ndim is 1:
                         vector = csr_matrix(self._global_dof_dimension,dtype=complex)
                     else:
-                        vector = csr_matrix((self._global_dof_dimension, value.shape[1]))
+                        vector = csr_matrix((self._global_dof_dimension, value.shape[1]), dtype=complex)
                 else:
                     if value.ndim is 1:
                         vector = np.zeros(self._global_dof_dimension,dtype=complex)
                     else:
-                        vector = np.zeros((self._global_dof_dimension, value.shape[1]))
+                        vector = np.zeros((self._global_dof_dimension, value.shape[1]), dtype=complex)
             if value.ndim is 1:
                 vector[self._interface2dof_map[interface]] = value
             else:

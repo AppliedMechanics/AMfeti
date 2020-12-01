@@ -12,9 +12,10 @@ from .local_problem_base import LocalProblemBase
 from amfeti.scaling import MultiplicityScaling
 from amfeti.preconditioners import *
 from amfeti.linalg.datatypes import Matrix
-import logging
+import logging, time
 from copy import copy
-
+import scipy
+import numpy as np
 __all__ = [
     'LinearDynamicLocalProblemFRF'
 ]
@@ -169,7 +170,9 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
             self.scaling = self._config_dict['scaling']
         if self.preconditioner is not None and self.scaling is not None:
             if self._config_dict['preconditioner_matrix'] == 'stiffness':
-               self.preconditioner.update(self.K, self._interface_dofs)
+                self.preconditioner.update(self.K, self._interface_dofs)
+            elif self._config_dict['preconditioner_matrix'] == 'dynamic_stiffness':
+                self.preconditioner.update(self.Z, self._interface_dofs)
             self.scaling.update(self.B)
         else:
             logger = logging.getLogger(__name__)
@@ -199,7 +202,13 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         """
         f = self._local_right_hand_side(external_solution_dict, external_force_bool)
 
-        q = self.Z.apply_inverse(f)
+        if f.ndim == 1 :
+            q = self.Z.apply_inverse(f)
+        else:
+            q = np.zeros((self.dimension,f.ndim), dtype=complex)
+            for nrRHS in range(f.shape[1]):
+                q[:,nrRHS] = self.Z.apply_inverse(f[:,nrRHS])
+
         if rigid_body_modes is not None and rigid_body_modes.size is not 0:
             q += self.Z.kernel.dot(rigid_body_modes)
         if external_force_bool:
@@ -210,22 +219,20 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
     def precondition(self, q_b_dict):
         """
         Precondition the external solution with local contributions
-
         Parameters
         ----------
         q_b_dict : dict
             predefined local solutions on the interfaces
-
         Returns
         -------
         external_solution_dict_scaled : dict
             preconditioned external solutions on the interfaces
         """
-        q_b_dict_scaled = self.scaling.apply(q_b_dict)
-
         if self.preconditioner is None:
+            q_b_dict_scaled = self._apply_halfscaling(copy(q_b_dict))
             external_solution_dict_scaled = q_b_dict_scaled
         else:
+            q_b_dict_scaled = self.scaling.apply(copy(q_b_dict))
             q_b_expanded = self._expand_external_solution(q_b_dict_scaled)
             external_solution = self.preconditioner.apply(q_b_expanded)
             external_solution_dict = self._distribute_to_interfaces(external_solution)
@@ -235,7 +242,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
     def _local_right_hand_side(self, external_solution_dict, external_force_bool):
         if not external_force_bool:
-            f = np.zeros_like(self.f,dtype=complex)
+            f = np.zeros_like((self.f),dtype=complex)
         else:
             f = np.copy(self.f)
 
@@ -258,12 +265,21 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         lamda : ndarray
             mapped external solution
         """
-        lamda = None
+        lambdas = None
         if external_solution_dict is not None:
-            lamda = np.zeros(self.dimension,dtype=complex)
+            lambdas = np.zeros((self.dimension),dtype=complex)
             for interface_id, B in self.B.items():
-                lamda = lamda + B.T.dot(external_solution_dict[interface_id])
-        return lamda
+                if external_solution_dict[interface_id].ndim == 1:
+                    lambdas = lambdas + B.T.dot(external_solution_dict[interface_id])
+                else:
+                    lambdas = np.zeros((self.dimension,2), dtype=complex)
+                    print(external_solution_dict[interface_id].shape[1])
+                    # for nrHS in range(external_solution_dictp[interface_id].shape[1]):
+                    for nrHS in range(2):
+                        lambdas[:,nrHS] = lambdas[:,nrHS] + B.T.dot(external_solution_dict[interface_id][:,nrHS])
+
+        return lambdas
+
 
     def _distribute_to_interfaces(self, q):
         """
@@ -308,6 +324,10 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
         return interface_dofs, interior_dofs
 
-
+    def _apply_halfscaling(self, q_b_dict):
+        external_solution_dict = {}
+        for interface_id, B in self.B.items():
+            external_solution_dict[interface_id] = np.divide(q_b_dict[interface_id], 2)
+        return external_solution_dict
 
 

@@ -170,6 +170,8 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         if self.preconditioner is not None and self.scaling is not None:
             if self._config_dict['preconditioner_matrix'] == 'stiffness':
                self.preconditioner.update(self.K, self._interface_dofs)
+            if self._config_dict['preconditioner_matrix'] == 'dynamic_stiffness':
+               self.preconditioner.update(self.Z, self._interface_dofs)
             self.scaling.update(self.B)
         else:
             logger = logging.getLogger(__name__)

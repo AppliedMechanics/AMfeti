@@ -414,8 +414,8 @@ class ORTHOMINsolver(GlobalSolverBase):
         if self._config_dict['max_iter'] is None:
             self._config_dict['max_iter'] = int(1 * interface_size)
 
-        logger.info('Setting GMRES tolerance = %4.2e' % self._config_dict['tolerance'])
-        logger.info('Setting GMRES max number of iterations = %i' % self._config_dict['max_iter'])
+        logger.info('Setting ORTHOMIN tolerance = %4.2e' % self._config_dict['tolerance'])
+        logger.info('Setting ORTHOMIN max number of iterations = %i' % self._config_dict['max_iter'])
 
         # initialize variables
         info_dict = {}
@@ -448,7 +448,7 @@ class ORTHOMINsolver(GlobalSolverBase):
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
             alpha = np.vdot(rk, Proj_V[k])
-            lambda_sol = lambda_sol + V[k] * alpha
+            lambda_sol +=  V[k] * alpha
 
             rk =rk - alpha * Proj_V[k]
 
@@ -477,9 +477,9 @@ class ORTHOMINsolver(GlobalSolverBase):
                 v_k = v_k -  beta*V[i]
                 eta = eta -  beta*Proj_V[i]
 
-
-            V[k+1] = v_k/np.linalg.norm(v_k)
-            Proj_V[k+1] = eta / np.linalg.norm(eta)
+            norm_eta = np.linalg.norm(eta)
+            V[k+1] = v_k/norm_eta
+            Proj_V[k+1] = eta /norm_eta
 
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
@@ -489,15 +489,15 @@ class ORTHOMINsolver(GlobalSolverBase):
 
         elapsed_time = time.time() - global_start_time
         logger.info('#' * 60)
-        logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))
-        logger.info('Number of GMRES Iterations = %i !' % (k + 1))
+        logger.info('{"Total_elaspsed_time_ORTHOMIN" : %2.2f} # Elapsed time [s]' % (elapsed_time))
+        logger.info('Number of ORTHOMIN Iterations = %i !' % (k + 1))
         avg_iteration_time = elapsed_time / (k + 1)
-        logger.info('{"avg_iteration_time_GMRES" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
+        logger.info('{"avg_iteration_time_ORTHOMIN" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
         logger.info('#' * 60)
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
-        info_dict['Total_elaspsed_time_GMRES'] = elapsed_time
-        info_dict['GMRES_iterations'] = k + 1
+        info_dict['Total_elaspsed_time_ORTHOMIN'] = elapsed_time
+        info_dict['ORTHOMIN_iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk

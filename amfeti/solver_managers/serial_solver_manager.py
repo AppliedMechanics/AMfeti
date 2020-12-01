@@ -109,6 +109,7 @@ class SerialSolverManager(SolverManagerBase):
 
         for problem_id, local_problem in self._local_problems_dict.items():
             BR_int_dict = dict()
+            #local_problem.
             for interface, B in local_problem.B.items():
                 BR_int_dict[interface] = np.array([])
 

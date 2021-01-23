@@ -10,9 +10,12 @@ Serial solver managers, that set global options, control the global solution-pro
 from .solver_manager_base import SolverManagerBase
 from amfeti.coarse_grid import NaturalCoarseGrid
 from amfeti.solution import StandardSolution
+import scipy.sparse as sp
 from scipy.sparse import csr_matrix, issparse
 import numpy as np
-
+from scipy.sparse.linalg import spsolve
+import matplotlib
+import scipy
 __all__ = ['SerialSolverManager']
 
 
@@ -137,22 +140,9 @@ class SerialSolverManager(SolverManagerBase):
         -------
         None
         """
-        config_dict = {'projection': self._coarse_grid.project,
-                       'precondition': self._apply_preconditioner}
-        lambda_rigid = self.initialize_lambda()
-
-        self.solver.set_config(config_dict)
-        lambda_sol, info_dict = self.solver.solve(self._F_action, self._residual, lambda_rigid)
-
-        alpha_sol = self._coarse_grid.solve(self._F_action(lambda_sol, True))
-        alpha_dict = self._coarse_grid.map_vector2localproblem(alpha_sol)
-
-        for problem_id, local_problem in self._local_problems_dict.items():
-            local_problem.solve(self._vector2interfacedict(lambda_sol), True, alpha_dict[problem_id])
-
-        self._lambda_sol = lambda_sol
-        self._alpha_sol = alpha_sol
-        self._info_dict.update(info_dict)
+        F_global = self._build_global_F_B()
+        eigen_value,eigen_vector = np.linalg.eig(F_global.toarray())
+        return eigen_value, eigen_vector
 
     def update_local_problems(self, lambda_sol, update_input_dict=None, local_info_dict=None):
         """
@@ -348,3 +338,30 @@ class SerialSolverManager(SolverManagerBase):
             else:
                 interface_dict[interface] = v[dofs, :]
         return interface_dict
+
+    def _build_global_F_B(self):
+        F_global = csr_matrix((self.no_lagrange_multiplier,self.no_lagrange_multiplier), dtype=np.complex)
+        F_global_1 = csr_matrix((self.no_lagrange_multiplier,self.no_lagrange_multiplier), dtype=np.complex)
+        global_interface_dict = dict()
+        for problem_id, local_problem in self._local_problems_dict.items():
+            Z_plus = spsolve(local_problem.Z.data,sp.eye(local_problem.dimension,local_problem.dimension))            
+            for interface, B_local_interface in local_problem.B.items():
+                F_local_interface_left = B_local_interface @ Z_plus
+                for interface_left, B_local_interface_right in local_problem.B.items():
+                    F_local_interface_left_right = F_local_interface_left @ B_local_interface_right.T
+                    F_global_1[np.ix_(self._interface2dof_map[interface], self._interface2dof_map[interface_left])] = \
+                        F_global_1[np.ix_(self._interface2dof_map[interface], self._interface2dof_map[interface_left])] + F_local_interface_left_right
+
+                if interface not in global_interface_dict.keys():
+                    global_interface_dict[interface] = {problem_id:F_local_interface_left_right}
+                else:
+                    global_interface_dict[interface].update({problem_id: F_local_interface_left_right})
+
+        # lambda_guess = np.arange(self.no_lagrange_multiplier)#np.ones(self.no_lagrange_multiplier)#
+        # F_global_x = F_global_1.dot(lambda_guess)
+        # F_global_xx = self._F_action(lambda_guess, False)
+        # diff =  np.linalg.norm(F_global_xx - F_global_x)/np.linalg.norm(F_global_xx)*100
+        # matplotlib.pyplot.spy(F_global_1)
+
+
+        return F_global_1

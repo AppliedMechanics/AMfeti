@@ -61,7 +61,7 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                          'frequency' : w_list,
                          'use_parallel': False,
                          'preconditioner':None,
-                         'preconditioner_matrix':'Mass',
+                         'preconditioner_matrix':'stiffness',
                          'scaling': MultiplicityScaling(),
                          'global_solver': PCPGsolver()})
         self.update_preconditioner = True
@@ -117,6 +117,9 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                                                          'scaling': copy(self._config_dict['scaling'])})
             self._local_problems[problem_id].update_preconditioner_and_scaling()
 
+
+
+
     def solve(self):
         """
         Runs the solver-manager's solve-method.
@@ -142,16 +145,28 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                 Z_dict[key] = buildZ(w, M_dict[key], K, alpha, beta)
             return Z_dict
         w_list = self._config_dict['frequency']
-        for omega in (w_list):
-            Z_dict_ = build_Z_dict(omega, M_dict, K_dict,alphaK,betaM)
+
+        if w_list.ndim == 0:
+            Z_dict_ = build_Z_dict(w_list, M_dict, K_dict, alphaK, betaM)
             self.set_config({'Z_dict': Z_dict_})
             self._update_local_problems()
             self._solver_manager.update()
             self._solver_manager.solve()
-            solution_dict[omega] = deepcopy(self._solver_manager.solution)
+            solution_dict[w_list] = deepcopy(self._solver_manager.solution)
             print("Frequency = %d : GMRES iteration %d"
-                  %( omega,solution_dict[omega].solver_information['GMRES_iterations'] ))
-        print('Solve done')      
+                  % (w_list, solution_dict[w_list].solver_information['Iterations']))
+
+        else:
+                for omega in (w_list):
+                    Z_dict_ = build_Z_dict(omega, M_dict, K_dict,alphaK,betaM)
+                    self.set_config({'Z_dict': Z_dict_})
+                    self._update_local_problems()
+                    self._solver_manager.update()
+                    self._solver_manager.solve()
+                    solution_dict[omega] = deepcopy(self._solver_manager.solution)
+                    print("Frequency = %d : GMRES iteration %d"
+                          %( omega,solution_dict[omega].solver_information['Iterations'] ))
+                print('Solve done')
         return solution_dict
     
  

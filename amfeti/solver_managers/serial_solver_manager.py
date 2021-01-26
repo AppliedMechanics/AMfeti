@@ -137,9 +137,9 @@ class SerialSolverManager(SolverManagerBase):
         None
         """
         config_dict = {'projection': self._coarse_grid.project,
-                       'precondition': self._apply_preconditioner}
-                       # 'precondition': self._apply_multi_preconditioner}
-                       # 'multiprecondition': self._apply_multi_preconditioner }
+                    # 'precondition': self._apply_preconditioner}
+                  'precondition': self._apply_multi_preconditioner}
+                       #  'multiprecondition': self._apply_multi_preconditioner }
         lambda_rigid = self.initialize_lambda()
 
         self.solver.set_config(config_dict)
@@ -151,9 +151,18 @@ class SerialSolverManager(SolverManagerBase):
         for problem_id, local_problem in self._local_problems_dict.items():
             local_problem.solve(self._vector2interfacedict(lambda_sol), True, alpha_dict[problem_id])
 
+        # gaps_dict = local_problem.computegaps()
         self._lambda_sol = lambda_sol
         self._alpha_sol = alpha_sol
         self._info_dict.update(info_dict)
+
+    # def computegaps(self):
+    #
+    #     gaps_dict = {}
+    #
+
+
+        return  gaps_dict
 
     def update_local_problems(self, lambda_sol, update_input_dict=None, local_info_dict=None):
         """

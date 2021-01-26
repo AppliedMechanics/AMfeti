@@ -12,6 +12,7 @@ from .local_problem_base import LocalProblemBase
 from amfeti.scaling import MultiplicityScaling
 from amfeti.preconditioners import *
 from amfeti.linalg.datatypes import Matrix
+from amfeti.preconditioners import DirichletPreconditioner as data
 import logging, time
 from copy import copy
 import scipy
@@ -64,8 +65,10 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         self.dimension = K.shape[0]
         self._config_dict = {'pseudoinverse_config': {'method': 'svd',
                                                       'tolerance': 1e-10},
-                             'preconditioner': None,
-                             'scaling': None}
+                             'preconditioner': DirichletPreconditioner(),
+                             'scaling': MultiplicityScaling(),
+                             'preconditioner_matrix': 'stiffness',
+                             }
         self.set_config(kwargs)
 
         if isinstance(K, Matrix):
@@ -178,6 +181,8 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
             logger = logging.getLogger(__name__)
             logger.debug('No preconditioner and/or no scaling was specified. Omitting the updating.')
 
+
+
     def solve(self, external_solution_dict, external_force_bool=False, rigid_body_modes=None):
         """
         Solution-method for the local problem
@@ -204,10 +209,55 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
         if f.ndim == 1 :
             q = self.Z.apply_inverse(f)
+
         else:
             q = np.zeros((self.dimension,f.ndim), dtype=complex)
             for nrRHS in range(f.shape[1]):
                 q[:,nrRHS] = self.Z.apply_inverse(f[:,nrRHS])
+
+        if rigid_body_modes is not None and rigid_body_modes.size is not 0:
+            q += self.Z.kernel.dot(rigid_body_modes)
+        if external_force_bool:
+            self.q = q
+        # for interface_id, B in B_items:
+
+            # primal_sol[interface_id] = dof
+        return self._distribute_to_interfaces(q)
+
+    def correct_primal_solution(self, external_solution_dict, external_force_bool=False, rigid_body_modes=None):
+        """
+              Solution-method for the last converged lambdas to get primal correction
+
+              Parameters
+              ----------
+              external_solution_dict : dict
+                  external solution, that acts on the local problem and is separated in interfaces according to the local
+                  B-matrices
+
+              external_force_bool : Boolean
+                  trigger for taking external force into account
+
+              rigid_body_modes : ndarray
+                  in case of singular local problems the kernel-solutions (rigid body modes in structural mechanics) can be
+                  added to the local solution
+
+              Returns
+              -------
+              u_b : dict
+                  dictionary of boundary-solutions with interface-keys
+              """
+        f = self._local_right_hand_side(external_solution_dict, external_force_bool)
+
+        if f.ndim == 1:
+            q = self.Z.apply_inverse(f)
+            q_b_dict_scaled = self.scaling.apply(q)
+            q_b = self._distribute_to_interfaces(q_b_dict_scaled)
+
+
+        else:
+            q = np.zeros((self.dimension, f.ndim), dtype=complex)
+            for nrRHS in range(f.shape[1]):
+                q[:, nrRHS] = self.Z.apply_inverse(f[:, nrRHS])
 
         if rigid_body_modes is not None and rigid_body_modes.size is not 0:
             q += self.Z.kernel.dot(rigid_body_modes)
@@ -242,7 +292,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
     def _local_right_hand_side(self, external_solution_dict, external_force_bool):
         if not external_force_bool:
-            f = np.zeros_like((self.f),dtype=complex)
+            f = np.zeros_like((self.f,external_solution_dict['interface1'].shape[1]), dtype=complex)
         else:
             f = np.copy(self.f)
 

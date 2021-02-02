@@ -292,7 +292,13 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
     def _local_right_hand_side(self, external_solution_dict, external_force_bool):
         if not external_force_bool:
-            f = np.zeros_like((self.f,external_solution_dict['interface1'].shape[1]), dtype=complex)
+
+            index=  external_solution_dict['interface1'].ndim
+
+            if index == 1:
+                f = np.zeros_like((self.f), dtype=complex)
+            else:
+                f = np.zeros((self.f.size,external_solution_dict['interface1'].shape[index-1]), dtype=complex)
         else:
             f = np.copy(self.f)
 

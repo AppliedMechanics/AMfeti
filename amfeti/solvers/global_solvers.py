@@ -620,7 +620,7 @@ class M_ORTHOMIN(GlobalSolverBase):
 
 
 
-        a = np.dot(Q_dict[0].T, np.conjugate(Q_dict[0]))
+        a = np.dot(np.conjugate(Q_dict[0].T),(Q_dict[0]))
         delta_dict[0] = np.linalg.pinv(a)
 
 
@@ -631,24 +631,26 @@ class M_ORTHOMIN(GlobalSolverBase):
             Minimizationstep = np.dot(Q_dict[k].T,np.conjugate(rk))
 
 
-
-            lambda_sol = lambda_sol + np.dot(W_dict[k],np.dot(delta_dict[k],np.conjugate(Minimizationstep)))
-            rk = rk - np.dot(Q_dict[k], np.dot(delta_dict[k],np.conjugate(Minimizationstep)))
+            AlphaParameter =np.dot(delta_dict[k],np.conjugate(Minimizationstep))
+            lambda_sol = lambda_sol + np.dot(W_dict[k],(AlphaParameter))
+            rk = rk - np.dot(Q_dict[k], (AlphaParameter))
 
             wk = np.linalg.norm(rk)
 
             W_dict[k+1] = self._precondition(rk)
             Q_dict[k+1] = F_callback(W_dict[k+1])
 
-            delta_dict[k + 1] = np.linalg.pinv(np.dot(Q_dict[k+1].T, Q_dict[k+1]))
+            delta_dict[k + 1] = np.linalg.pinv(np.dot(np.conjugate(Q_dict[k+1].T), Q_dict[k+1]))
 
 
 
             if self._config_dict['full_reorthogonalization']:
                 for i in range(k):
-                    phi_ik = np.dot(delta_dict[i],np.dot( Q_dict[i].T, np.conjugate(Q_dict[k+1])))
-                    W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],np.conjugate(phi_ik))
-                    Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],np.conjugate(phi_ik))
+
+                    Numerator = np.dot( np.conjugate(Q_dict[i].T), (Q_dict[k+1]))
+                    beta_ik = np.dot(delta_dict[i], (Numerator))
+                    W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],(beta_ik))
+                    Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -802,6 +804,8 @@ class ORTHOMINsolver(GlobalSolverBase):
             lambda_sol = lambda_sol + V[k] * alpha
 
             rk =rk - alpha * Proj_V[k]
+
+            wk = np.linalg.norm(rk)
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)

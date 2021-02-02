@@ -137,7 +137,7 @@ class SerialSolverManager(SolverManagerBase):
         None
         """
         config_dict = {'projection': self._coarse_grid.project,
-                    # 'precondition': self._apply_preconditioner}
+                   # 'precondition': self._apply_preconditioner}
                   'precondition': self._apply_multi_preconditioner}
                        #  'multiprecondition': self._apply_multi_preconditioner }
         lambda_rigid = self.initialize_lambda()

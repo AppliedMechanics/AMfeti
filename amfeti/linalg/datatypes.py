@@ -11,7 +11,57 @@ from .tools import splusps, cholsps
 
 __all__ = ['Pseudoinverse',
            'Matrix',
-           'Vector']
+           'Vector',
+           ]
+
+
+    # def compute(self, K, tol=None, solver_opt=None):
+    #     ''' This method computes the kernel and inverse operator
+    #     '''
+    #
+    #     # store matrix to future use
+    #     self.matrix = K
+    #
+    #     if solver_opt is None:
+    #         solver_opt = self.solver_opt
+    #
+    #     if tol is None:
+    #         tol = self.tolerance
+    #
+    #     if solver_opt == 'splusps':
+    #         lu, idf, R = splusps(K, tol=tol)
+    #
+    #         # add constraint in K matrix and applu SuperLu again
+    #         if len(idf):
+    #             Pr = lambda x: x - R.dot(R.T.dot(x))
+    #         else:
+    #             Pr = lambda x: x
+    #
+    #         K_pinv = lambda x: Pr(lu.solve(x))
+    #
+    #     elif solver_opt == 'cholsps':
+    #         U, idf, R = cholsps(K, tol=tol)
+    #         U[idf, :] = 0.0
+    #         U[:, idf] = 0.0
+    #         U[idf, idf] = 1.0
+    #         K_pinv = lambda f: cho_solve((U, False), f)
+    #
+    #     elif solver_opt == 'svd':
+    #         K_inv, R = pinv_and_null_space_svd(K, tol=tol)
+    #         K_pinv = np.array(K_inv).dot
+    #         idf = []
+    #
+    #     else:
+    #         raise ('Solver %s not implement. Check list_of_solvers.')
+    #
+    #     self.pinv = K_pinv
+    #     self.free_index = idf
+    #     if R is not None:
+    #         self.null_space = R
+    #     else:
+    #         self.null_space = np.array([])
+    #
+    #     return self
 
 
 class Pseudoinverse:

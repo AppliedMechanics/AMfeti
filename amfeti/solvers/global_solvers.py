@@ -12,7 +12,7 @@ from amfeti.config_base import ConfigBase
 import logging
 import numpy as np
 import time
-from amfeti.linalg.datatypes import Pseudoinverse
+from amfeti.linalg.datatypes import Matrix,Pseudoinverse
 
 from copy import copy
 from scipy.sparse import csr_matrix, hstack, vstack
@@ -31,6 +31,8 @@ class GlobalSolverBase(ConfigBase):
 
     def solve(self, *args):
         return None
+
+
 
 
 class M_PCPGsolver(GlobalSolverBase):
@@ -617,35 +619,36 @@ class M_ORTHOMIN(GlobalSolverBase):
         Q_dict[0] = F_callback(W_dict[0])
 
 
-        Compute_delta = Pseudoinverse(np.dot(Q_dict[0].T, Q_dict[0]))
+
+        a = np.dot(Q_dict[0].T, np.conjugate(Q_dict[0]))
+        delta_dict[0] = np.linalg.pinv(a)
 
 
-        delta_dict[0] = Compute_delta.psudeoinverve.compute(Compute_delta.data)
+
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            Firstproduct = np.dot(Q_dict[k].T,rk)
+            Minimizationstep = np.dot(Q_dict[k].T,np.conjugate(rk))
 
 
 
-            lambda_sol = lambda_sol + np.dot(W_dict[k],np.dot(delta_dict[k],Firstproduct))
-            rk = rk - np.dot(Q_dict[k], np.dot(delta_dict[k],Firstproduct))
+            lambda_sol = lambda_sol + np.dot(W_dict[k],np.dot(delta_dict[k],np.conjugate(Minimizationstep)))
+            rk = rk - np.dot(Q_dict[k], np.dot(delta_dict[k],np.conjugate(Minimizationstep)))
 
             wk = np.linalg.norm(rk)
 
             W_dict[k+1] = self._precondition(rk)
             Q_dict[k+1] = F_callback(W_dict[k+1])
 
+            delta_dict[k + 1] = np.linalg.pinv(np.dot(Q_dict[k+1].T, Q_dict[k+1]))
 
-            Compute_delta = Matrix(np.dot(Q_dict[k+1].T, Q_dict[k+1]))
-            delta_dict[k + 1] = Compute_delta.data
 
 
             if self._config_dict['full_reorthogonalization']:
                 for i in range(k):
-                    phi_ik = np.dot( Q_dict[i].T, Q_dict[k+1])
-                    W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],delta_dict[i])
-                    Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],delta_dict[i])
+                    phi_ik = np.dot(delta_dict[i],np.dot( Q_dict[i].T, np.conjugate(Q_dict[k+1])))
+                    W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],np.conjugate(phi_ik))
+                    Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],np.conjugate(phi_ik))
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -703,6 +706,8 @@ class M_ORTHOMIN(GlobalSolverBase):
             v = project(v)
         return v
 
+
+        return v
 
 
 

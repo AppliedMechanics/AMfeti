@@ -615,6 +615,7 @@ class M_ORTHOMIN(GlobalSolverBase):
         """ Initialize the solution and residual vectors"""
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
+        #rk = rk/np.linalg.norm(rk)
         W_dict[0] = self._precondition(rk)
         Q_dict[0] = F_callback(W_dict[0])
 
@@ -628,10 +629,10 @@ class M_ORTHOMIN(GlobalSolverBase):
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            Minimizationstep = np.dot(Q_dict[k].T,np.conjugate(rk))
+            Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
 
 
-            AlphaParameter =np.dot(delta_dict[k],np.conjugate(Minimizationstep))
+            AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
             lambda_sol = lambda_sol + np.dot(W_dict[k],(AlphaParameter))
             rk = rk - np.dot(Q_dict[k], (AlphaParameter))
 

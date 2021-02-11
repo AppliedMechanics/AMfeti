@@ -211,7 +211,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
             q = self.Z.apply_inverse(f)
 
         else:
-            q = np.zeros((self.dimension,f.ndim), dtype=complex)
+            q = np.zeros((self.dimension,f.shape[1]), dtype=complex)
             for nrRHS in range(f.shape[1]):
                 q[:,nrRHS] = self.Z.apply_inverse(f[:,nrRHS])
 
@@ -328,10 +328,10 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
                 if external_solution_dict[interface_id].ndim == 1:
                     lambdas = lambdas + B.T.dot(external_solution_dict[interface_id])
                 else:
-                    lambdas = np.zeros((self.dimension,2), dtype=complex)
-                    print(external_solution_dict[interface_id].shape[1])
+                    lambdas = np.zeros((self.dimension,external_solution_dict[interface_id].shape[1]), dtype=complex)
+                    # print(external_solution_dict[interface_id].shape[1])
                     # for nrHS in range(external_solution_dictp[interface_id].shape[1]):
-                    for nrHS in range(2):
+                    for nrHS in range(lambdas.shape[1]):
                         lambdas[:,nrHS] = lambdas[:,nrHS] + B.T.dot(external_solution_dict[interface_id][:,nrHS])
 
         return lambdas

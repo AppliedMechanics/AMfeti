@@ -137,7 +137,7 @@ class SerialSolverManager(SolverManagerBase):
         None
         """
         config_dict = {'projection': self._coarse_grid.project,
-                  # 'precondition': self._apply_preconditioner}
+                  #'precondition': self._apply_preconditioner}
                   'precondition': self._apply_multi_preconditioner}
                        #  'multiprecondition': self._apply_multi_preconditioner }
         lambda_rigid = self.initialize_lambda()
@@ -162,7 +162,7 @@ class SerialSolverManager(SolverManagerBase):
     #
 
 
-        return  gaps_dict
+        # return  gaps_dict
 
     def update_local_problems(self, lambda_sol, update_input_dict=None, local_info_dict=None):
         """

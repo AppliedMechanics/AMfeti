@@ -13,7 +13,7 @@ import logging
 import numpy as np
 import time
 from amfeti.linalg.datatypes import Matrix,Pseudoinverse
-
+from scipy import linalg as sp
 from copy import copy
 from scipy.sparse import csr_matrix, hstack, vstack
 from scipy.sparse.linalg import spsolve
@@ -566,7 +566,7 @@ class M_ORTHOMIN(GlobalSolverBase):
                              'max_iter': None,
                              'projection': None,
                              'energy_norm': False,
-                             'save_history': False,
+                             'save_history': True,
                              'full_reorthogonalization': True}
 
     def solve(self, F_callback, residual_callback, lambda_init):
@@ -615,15 +615,39 @@ class M_ORTHOMIN(GlobalSolverBase):
         """ Initialize the solution and residual vectors"""
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
-        #rk = rk/np.linalg.norm(rk)
-        W_dict[0] = self._precondition(rk)
-        Q_dict[0] = F_callback(W_dict[0])
+        Intialnorm = np.linalg.norm(rk)
+        SearchDirections = self._precondition(rk)
+        ProjectedSearchDirections = F_callback(SearchDirections)
+
+        Qdecom,Rdecom = np.linalg.qr(ProjectedSearchDirections, mode='reduced')
+
+        Q_dict[0] = Qdecom
+        W_dict[0] = np.dot(SearchDirections,np.linalg.pinv(Rdecom))
+
+        # FilteredVectors= ProjectedSearchDirections[:,0]
 
 
-
-        a = np.dot(np.conjugate(Q_dict[0].T),(Q_dict[0]))
-        delta_dict[0] = np.linalg.pinv(a)
-
+        # """" Filter the search directions """
+        # iCounter=1
+        # for iSearchDirections in range(ProjectedSearchDirections.shape[1]-1):
+        #
+        #     SecondVector = SearchDirections[:,iSearchDirections+1]
+        #     ScalarProduct = np.linalg.norm(np.dot(SearchDirections[:,0].T,SecondVector))
+        #
+        #
+        #     if (ScalarProduct >=  0.5):
+        #         iCounter= iCounter+1
+        #         FilteredVectors = np.append(FilteredVectors,SecondVector)
+        #
+        #
+        #
+        #
+        # if iCounter >1:
+        #
+        #     FilteredVectors.resize(SearchDirections.shape[0],iCounter)
+        #
+        #
+        # W_dict[0] = FilteredVectors
 
 
 
@@ -631,27 +655,60 @@ class M_ORTHOMIN(GlobalSolverBase):
             info_dict[k] = {}
             Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
 
+            QtQ = np.dot(np.conjugate(Q_dict[k].T), (Q_dict[k]))
 
-            AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
+            if QtQ.ndim ==1:
+                AlphaParameter = 1
+            else:
+                delta_dict[k] = np.linalg.pinv(QtQ)
+                AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
+
+
             lambda_sol = lambda_sol + np.dot(W_dict[k],(AlphaParameter))
             rk = rk - np.dot(Q_dict[k], (AlphaParameter))
 
-            wk = np.linalg.norm(rk)
+            wk = np.linalg.norm(rk)/Intialnorm
 
-            W_dict[k+1] = self._precondition(rk)
-            Q_dict[k+1] = F_callback(W_dict[k+1])
+            SearchDirections = self._precondition(rk)
 
-            delta_dict[k + 1] = np.linalg.pinv(np.dot(np.conjugate(Q_dict[k+1].T), Q_dict[k+1]))
+            # FilteredVectors = SearchDirections[:, 0]
+            # """" Filter the search directions """
+            # iCounter = 1
+            # for iSearchDirections in range(SearchDirections.shape[1] - 1):
+            #
+            #     SecondVector = SearchDirections[:, iSearchDirections + 1]
+            #     ScalarProduct = np.linalg.norm(np.dot(SearchDirections[:, 0].T, SecondVector))
+            #
+            #     if (ScalarProduct >= 0.5):
+            #         iCounter = iCounter + 1
+            #         FilteredVectors = np.append(FilteredVectors, SecondVector)
+            #
+            # if iCounter > 1:
+            #     FilteredVectors.resize(SearchDirections.shape[0], iCounter)
+            #
+            # W_dict[k+1] = FilteredVectors
 
+            ProjectedSearchDirections = F_callback(SearchDirections)
+            # Q_dict[k+1] = FZ1
+            #delta_dict[k + 1] = np.linalg.pinv(np.dot(np.conjugate(Q_dict[k+1].T), Q_dict[k+1]))
 
+            Qdecom, Rdecom = np.linalg.qr(ProjectedSearchDirections, mode='reduced')
+
+            FZ1 = Qdecom
+            Q_dict[k+1] = Qdecom
+            W_dict[k+1] = np.dot(SearchDirections, np.linalg.pinv(Rdecom))
 
             if self._config_dict['full_reorthogonalization']:
-                for i in range(k):
+                for i in range(k+1):
 
-                    Numerator = np.dot( np.conjugate(Q_dict[i].T), (Q_dict[k+1]))
-                    beta_ik = np.dot(delta_dict[i], (Numerator))
+                    Numerator = np.dot( np.conjugate(Q_dict[i].T), FZ1)
+                    beta_ik = np.dot(delta_dict[i], Numerator)
                     W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],(beta_ik))
                     Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
+
+                # for iOrth in range(0, Q_dict[k+1].shape[1]):
+                #     W_dict[k+1][:,iOrth] = W_dict[k+1][:,iOrth]/np.linalg.norm(W_dict[k+1][:,iOrth])
+                #     Q_dict[k + 1][:, iOrth] = Q_dict[k + 1][:, iOrth] / np.linalg.norm(Q_dict[k + 1][:, iOrth])
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)

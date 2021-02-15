@@ -360,7 +360,7 @@ class GMRESsolver(PCPGsolver):
 
         return lambda_sol, info_dict
 
-class ORTHOMINsolver(GlobalSolverBase):
+class ORTHOMINsolver(PCPGsolver):
 
 
     """
@@ -380,7 +380,7 @@ class ORTHOMINsolver(GlobalSolverBase):
         None
         """
         super().__init__()
-        self._config_dict = {'tolerance': 1e-7,
+        self._config_dict = {'tolerance': 1e-8,
                              'max_iter': None,
                              'projection': None,
                              'precondition': None,
@@ -447,10 +447,10 @@ class ORTHOMINsolver(GlobalSolverBase):
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            alpha = np.vdot(rk, Proj_V[k])
-            lambda_sol +=  V[k] * alpha
+            alpha = np.dot(np.conjugate(Proj_V[k]), rk) / np.dot(np.conjugate(Proj_V[k]), Proj_V[k])
+            lambda_sol = lambda_sol + V[k] * alpha
 
-            rk =rk - alpha * Proj_V[k]
+            rk = rk - alpha * Proj_V[k]
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -468,19 +468,20 @@ class ORTHOMINsolver(GlobalSolverBase):
                     logger.info('Orthomin has converged after %i' % (k + 1))
                     break
 
-            eta = F_callback(rk)
-            v_k = rk
+            AZ1 = F_callback(rk)
+            P = rk
 
+            V[k+1] = P
+            Proj_V[k+1] = AZ1
 
             for i in range(k+1):
-                beta  = np.vdot(eta, Proj_V[i])
-                v_k = v_k -  beta*V[i]
-                eta = eta -  beta*Proj_V[i]
+                beta  = np.dot(np.conjugate(Proj_V[i]),AZ1 ) / np.dot(np.conjugate(Proj_V[i]), Proj_V[i])
+                V[k+1] = V[k+1] -  beta*V[i]
+                Proj_V[k+1] = Proj_V[k+1] -  beta*Proj_V[i]
 
-            norm_eta = np.linalg.norm(eta)
-            V[k+1] = v_k/norm_eta
-            Proj_V[k+1] = eta /norm_eta
 
+
+        lambda_sol = self._project(lambda_sol) + lambda_init
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
@@ -497,7 +498,7 @@ class ORTHOMINsolver(GlobalSolverBase):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_ORTHOMIN'] = elapsed_time
-        info_dict['ORTHOMIN_iterations'] = k + 1
+        info_dict['Iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk

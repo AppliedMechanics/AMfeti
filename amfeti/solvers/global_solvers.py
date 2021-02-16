@@ -422,6 +422,7 @@ class ORTHOMINsolver(PCPGsolver):
         global_start_time = time.time()
         residual_hist = np.array([])
         lambda_hist = np.array([])
+        projected_subspace = []
 
         V = dict()
         Proj_V = dict()
@@ -429,21 +430,14 @@ class ORTHOMINsolver(PCPGsolver):
 
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
-        residual_0 = copy(rk)
-        """ copy with numpy unlinks the two arrays 
-        """
-        lambda_0 = copy(lambda_init)
-        k = 0
-        norm_vk = np.linalg.norm(rk)
-        V[0] = rk
-               # / norm_vk
-        vk_stack = V[0][np.newaxis].T
-        V_stack = csr_matrix(vk_stack)
+        wk = self._project(rk)
+        zk = self._precondition(wk)
+        yk = self._project(zk)
 
-        proj_v= F_callback(rk)
-        norm_proj_vk= np.linalg.norm(proj_v)
-        Proj_V[0] = proj_v
-        projected_subspace = []
+
+        V[0] = yk
+        Proj_V[0] = F_callback(V[0])
+
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
@@ -451,6 +445,9 @@ class ORTHOMINsolver(PCPGsolver):
             lambda_sol = lambda_sol + V[k] * alpha
 
             rk = rk - alpha * Proj_V[k]
+            wk = self._project(rk)
+            zk = self._precondition(wk)
+            yk = self._project(zk)
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -468,10 +465,8 @@ class ORTHOMINsolver(PCPGsolver):
                     logger.info('Orthomin has converged after %i' % (k + 1))
                     break
 
-            AZ1 = F_callback(rk)
-            P = rk
-
-            V[k+1] = P
+            AZ1 = F_callback(yk)
+            V[k+1] = yk
             Proj_V[k+1] = AZ1
 
             for i in range(k+1):

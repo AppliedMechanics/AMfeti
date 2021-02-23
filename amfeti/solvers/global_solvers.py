@@ -216,7 +216,7 @@ class GMRESsolver(PCPGsolver):
         None
         """
         super().__init__()
-        self._config_dict = {'tolerance': 1e-7,
+        self._config_dict = {'tolerance': 1e-9,
                              'max_iter': None,
                              'projection': None,
                              'precondition': None,
@@ -470,7 +470,7 @@ class ORTHOMINsolver(PCPGsolver):
             Proj_V[k+1] = AZ1
 
             for i in range(k+1):
-                beta  = np.dot(np.conjugate(Proj_V[i]),AZ1 ) / np.dot(np.conjugate(Proj_V[i]), Proj_V[i])
+                beta  = np.dot(np.conjugate(Proj_V[i]),Proj_V[k+1] ) / np.dot(np.conjugate(Proj_V[i]), Proj_V[i])
                 V[k+1] = V[k+1] -  beta*V[i]
                 Proj_V[k+1] = Proj_V[k+1] -  beta*Proj_V[i]
 

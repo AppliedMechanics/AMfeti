@@ -13,7 +13,7 @@ import logging
 import numpy as np
 import time
 from amfeti.linalg.datatypes import Matrix,Pseudoinverse
-from scipy import linalg as sp
+from scipy import linalg as spp
 from copy import copy
 from scipy.sparse import csr_matrix, hstack, vstack
 from scipy.sparse.linalg import spsolve
@@ -536,7 +536,7 @@ class GMRESsolver(PCPGsolver):
 
         return lambda_sol, info_dict
 
-class M_ORTHOMIN(GlobalSolverBase):
+class M_ORTHOMIN(PCPGsolver):
     """
 
     References
@@ -615,39 +615,20 @@ class M_ORTHOMIN(GlobalSolverBase):
         """ Initialize the solution and residual vectors"""
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
+        InitialResidual = rk
         Intialnorm = np.linalg.norm(rk)
-        SearchDirections = self._precondition(rk)
+
+        # wk = self._project(rk)
+        zk = self._precondition(rk)
+
+        # SearchDirections = self._project(zk)
+        SearchDirections = zk
         ProjectedSearchDirections = F_callback(SearchDirections)
 
-        Qdecom,Rdecom = np.linalg.qr(ProjectedSearchDirections, mode='reduced')
 
-        Q_dict[0] = Qdecom
-        W_dict[0] = np.dot(SearchDirections,np.linalg.pinv(Rdecom))
-
-        # FilteredVectors= ProjectedSearchDirections[:,0]
-
-
-        # """" Filter the search directions """
-        # iCounter=1
-        # for iSearchDirections in range(ProjectedSearchDirections.shape[1]-1):
+        Q_dict[0] = ProjectedSearchDirections[:,[0, 1, 2]] #/ np.linalg.norm(ProjectedSearchDirections[:,[1]])
+        W_dict[0] = SearchDirections[:,[0,1, 2]]  #/ np.linalg.norm(ProjectedSearchDirections[:,[1]])
         #
-        #     SecondVector = SearchDirections[:,iSearchDirections+1]
-        #     ScalarProduct = np.linalg.norm(np.dot(SearchDirections[:,0].T,SecondVector))
-        #
-        #
-        #     if (ScalarProduct >=  0.5):
-        #         iCounter= iCounter+1
-        #         FilteredVectors = np.append(FilteredVectors,SecondVector)
-        #
-        #
-        #
-        #
-        # if iCounter >1:
-        #
-        #     FilteredVectors.resize(SearchDirections.shape[0],iCounter)
-        #
-        #
-        # W_dict[0] = FilteredVectors
 
 
 
@@ -656,59 +637,72 @@ class M_ORTHOMIN(GlobalSolverBase):
             Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
 
             QtQ = np.dot(np.conjugate(Q_dict[k].T), (Q_dict[k]))
+            delta_dict[k] = np.linalg.pinv(QtQ)
+            # if QtQ.ndim ==0:
+            #     AlphaParameter = Minimizationstep
+            # else:
+            #     # delta_dict[k] = np.linalg.pinv(QtQ)
+            #     # AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
+            #     AlphaParameter = Minimizationstep
+            AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
 
-            if QtQ.ndim ==1:
-                AlphaParameter = 1
-            else:
-                delta_dict[k] = np.linalg.pinv(QtQ)
-                AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
 
-
-            lambda_sol = lambda_sol + np.dot(W_dict[k],(AlphaParameter))
+            lambda_sol = lambda_sol + np.dot(W_dict[k],AlphaParameter)
             rk = rk - np.dot(Q_dict[k], (AlphaParameter))
 
-            wk = np.linalg.norm(rk)/Intialnorm
+            ActualResidual = np.linalg.norm(residual_callback(lambda_sol))
 
-            SearchDirections = self._precondition(rk)
-
-            # FilteredVectors = SearchDirections[:, 0]
-            # """" Filter the search directions """
-            # iCounter = 1
-            # for iSearchDirections in range(SearchDirections.shape[1] - 1):
-            #
-            #     SecondVector = SearchDirections[:, iSearchDirections + 1]
-            #     ScalarProduct = np.linalg.norm(np.dot(SearchDirections[:, 0].T, SecondVector))
-            #
-            #     if (ScalarProduct >= 0.5):
-            #         iCounter = iCounter + 1
-            #         FilteredVectors = np.append(FilteredVectors, SecondVector)
-            #
-            # if iCounter > 1:
-            #     FilteredVectors.resize(SearchDirections.shape[0], iCounter)
-            #
-            # W_dict[k+1] = FilteredVectors
-
+            wk = self._project(rk)
+            zk = self._precondition(wk)
+            SearchDirections = self._project(zk)
             ProjectedSearchDirections = F_callback(SearchDirections)
-            # Q_dict[k+1] = FZ1
-            #delta_dict[k + 1] = np.linalg.pinv(np.dot(np.conjugate(Q_dict[k+1].T), Q_dict[k+1]))
 
-            Qdecom, Rdecom = np.linalg.qr(ProjectedSearchDirections, mode='reduced')
 
-            FZ1 = Qdecom
-            Q_dict[k+1] = Qdecom
-            W_dict[k+1] = np.dot(SearchDirections, np.linalg.pinv(Rdecom))
+            QtQ = np.dot(np.conjugate(ProjectedSearchDirections.T), (ProjectedSearchDirections))
+            GetRank = np.linalg.matrix_rank(QtQ)
+
+            Ldecomp, Ddecomp, perm = spp.ldl(QtQ, hermitian=True)
+
+            RankRevealedIndices = np.take(perm, np.arange(0, GetRank).tolist())
+
+            Lupdate  = Ldecomp[RankRevealedIndices,RankRevealedIndices]
+            Linverse = np.linalg.pinv(np.conjugate(Ldecomp.T))
+            Dinverse = np.linalg.pinv(np.sqrt(Ddecomp))
+
+            Qupdated = np.dot(ProjectedSearchDirections, np.dot(Linverse, Dinverse))
+            SearchDirectionsUpdated = np.dot(SearchDirections, np.dot(Linverse, Dinverse))
+            StoreColumnId = np.empty((0), dtype=int)
+            for iCounter in range(Qupdated.shape[1]):
+
+                if np.linalg.norm(Qupdated[:, iCounter]) < 1e-6:
+                    StoreColumnId = np.append(StoreColumnId, iCounter)
+
+            Qupdated = np.delete(Qupdated, StoreColumnId, axis=1)
+            SearchDirectionsUpdated = np.delete(SearchDirectionsUpdated, StoreColumnId, axis=1)
+
+
+            W_dict[k+1] = SearchDirectionsUpdated
+            Q_dict[k + 1] = Qupdated
+            #(np.dot(np.conjugate(Qdecom.T), Qdecom) >= 1e-8) or
+            if  (np.linalg.norm(Q_dict[k+1] - F_callback(W_dict[k+1])) >= 1e-6):
+                print("the basis is inconsistent")
+
+
+            if np.linalg.norm(np.dot(np.conjugate(Q_dict[k+1].T),Q_dict[k+1]) - np.linalg.norm(np.linalg.matrix_rank(QtQ))):
+                print("the basis is inconsistent")
+
+
+
+            ActualResidual = np.linalg.norm(InitialResidual - F_callback(lambda_sol))/np.linalg.norm(InitialResidual)
 
             if self._config_dict['full_reorthogonalization']:
                 for i in range(k+1):
 
-                    Numerator = np.dot( np.conjugate(Q_dict[i].T), FZ1)
+                    Numerator = np.dot( np.conjugate(Q_dict[i].T), Q_dict[k + 1])
                     beta_ik = np.dot(delta_dict[i], Numerator)
                     W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],(beta_ik))
                     Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
 
-                # for iOrth in range(0, Q_dict[k+1].shape[1]):
-                #     W_dict[k+1][:,iOrth] = W_dict[k+1][:,iOrth]/np.linalg.norm(W_dict[k+1][:,iOrth])
-                #     Q_dict[k + 1][:, iOrth] = Q_dict[k + 1][:, iOrth] / np.linalg.norm(Q_dict[k + 1][:, iOrth])
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -746,32 +740,15 @@ class M_ORTHOMIN(GlobalSolverBase):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['PCPG_iterations'] = k + 1
+        info_dict['Iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
         return lambda_sol, info_dict
 
-    def _precondition(self, v):
-        if self._config_dict['precondition'] is not None:
-            precondition = self._config_dict['precondition']
-            v = precondition(v)
-            return v
-        else:
-            return copy(v)
-
-    def _project(self, v):
-        if self._config_dict['projection'] is not None:
-            project = self._config_dict['projection']
-            v = project(v)
-        return v
 
 
-        return v
-
-
-
-class ORTHOMINsolver(GlobalSolverBase):
+class ORTHOMINsolver(PCPGsolver):
 
 
     """
@@ -846,24 +823,32 @@ class ORTHOMINsolver(GlobalSolverBase):
         lambda_0 = copy(lambda_init)
         k = 0
         norm_vk = np.linalg.norm(rk)
-        V[0] = rk
-               # / norm_vk
-        vk_stack = V[0][np.newaxis].T
-        V_stack = csr_matrix(vk_stack)
 
-        proj_v= F_callback(rk)
+        wk = self._project(rk)
+        zk = self._precondition(wk)
+        yk = self._project(zk)
+
+
+        V[0] = yk
+
+        # vk_stack = V[0][np.newaxis].T
+        # V_stack = csr_matrix(vk_stack)
+
+        proj_v= F_callback(yk)
         norm_proj_vk= np.linalg.norm(proj_v)
         Proj_V[0] = proj_v
         projected_subspace = []
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            alpha = np.vdot(rk, Proj_V[k])
+            alpha = np.vdot(rk, Proj_V[k]) / np.vdot(Proj_V[k],Proj_V[k])
             lambda_sol = lambda_sol + V[k] * alpha
 
             rk =rk - alpha * Proj_V[k]
 
-            wk = np.linalg.norm(rk)
+            wk = self._project(rk)
+            zk = self._precondition(wk)
+            yk = self._project(zk)
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -881,18 +866,18 @@ class ORTHOMINsolver(GlobalSolverBase):
                     logger.info('Orthomin has converged after %i' % (k + 1))
                     break
 
-            eta = F_callback(rk)
-            v_k = rk
+            eta = F_callback(yk)
+            v_k = yk
 
 
             for i in range(k+1):
-                beta  = np.vdot(eta, Proj_V[i])
+                beta  = np.vdot(eta, Proj_V[i])/ np.vdot(Proj_V[i],Proj_V[i])
                 v_k = v_k -  beta*V[i]
                 eta = eta -  beta*Proj_V[i]
 
 
-            V[k+1] = v_k/np.linalg.norm(v_k)
-            Proj_V[k+1] = eta / np.linalg.norm(eta)
+            V[k+1] = v_k  #/np.linalg.norm(v_k)
+            Proj_V[k+1] = eta #/ np.linalg.norm(eta)
 
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
@@ -910,7 +895,7 @@ class ORTHOMINsolver(GlobalSolverBase):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_GMRES'] = elapsed_time
-        info_dict['GMRES_iterations'] = k + 1
+        info_dict['Iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk

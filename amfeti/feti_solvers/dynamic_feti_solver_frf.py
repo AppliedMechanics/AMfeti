@@ -152,9 +152,9 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
             self._update_local_problems()
             self._solver_manager.update()
             self._solver_manager.solve()
-            solution_dict[w_list] = deepcopy(self._solver_manager.solution)
+            solution_dict[0] = deepcopy(self._solver_manager.solution)
             print("Frequency = %d : GMRES iteration %d"
-                  % (w_list, solution_dict[w_list].solver_information['Iterations']))
+                  % (w_list, solution_dict[0].solver_information['Iterations']))
 
         else:
                 for omega in (w_list):
@@ -163,9 +163,9 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                     self._update_local_problems()
                     self._solver_manager.update()
                     self._solver_manager.solve()
-                    solution_dict[omega] = deepcopy(self._solver_manager.solution)
+                    solution_dict[0] = deepcopy(self._solver_manager.solution)
                     print("Frequency = %d : GMRES iteration %d"
-                          %( omega,solution_dict[omega].solver_information['Iterations'] ))
+                          %( omega,solution_dict[0].solver_information['Iterations'] ))
                 print('Solve done')
         return solution_dict
     

@@ -385,7 +385,7 @@ class ORTHOMINsolver(PCPGsolver):
                              'projection': None,
                              'precondition': None,
                              'energy_norm': False,
-                             'save_history': False}
+                             'save_history': True}
 
     def solve(self, F_callback, residual_callback, lambda_init):
         """
@@ -430,6 +430,7 @@ class ORTHOMINsolver(PCPGsolver):
 
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
+        d = rk
         wk = self._project(rk)
         zk = self._precondition(wk)
         yk = self._project(zk)
@@ -438,10 +439,13 @@ class ORTHOMINsolver(PCPGsolver):
         V[0] = yk
         Proj_V[0] = F_callback(V[0])
 
+        norm_projv0 = np.linalg.norm(Proj_V[0])
+        Proj_V[0] = Proj_V[0] /norm_projv0
+        V[0] = V[0]/ norm_projv0
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            alpha = np.dot(np.conjugate(Proj_V[k]), rk) / np.dot(np.conjugate(Proj_V[k]), Proj_V[k])
+            alpha = np.dot(np.conjugate(Proj_V[k].T), rk) #/ np.dot(np.conjugate(Proj_V[k]), Proj_V[k])
             lambda_sol = lambda_sol + V[k] * alpha
 
             rk = rk - alpha * Proj_V[k]
@@ -470,11 +474,13 @@ class ORTHOMINsolver(PCPGsolver):
             Proj_V[k+1] = AZ1
 
             for i in range(k+1):
-                beta  = np.dot(np.conjugate(Proj_V[i]),Proj_V[k+1] ) / np.dot(np.conjugate(Proj_V[i]), Proj_V[i])
+                beta  = np.dot(np.conjugate(Proj_V[i].T),Proj_V[k+1] )
                 V[k+1] = V[k+1] -  beta*V[i]
                 Proj_V[k+1] = Proj_V[k+1] -  beta*Proj_V[i]
 
-
+            norm_projv = np.linalg.norm(Proj_V[k+1])
+            V[k + 1] = V[k+1] / norm_projv
+            Proj_V[k + 1] = Proj_V[k+1] / norm_projv
 
         lambda_sol = self._project(lambda_sol) + lambda_init
 

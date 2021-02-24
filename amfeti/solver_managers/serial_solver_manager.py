@@ -137,14 +137,13 @@ class SerialSolverManager(SolverManagerBase):
         None
         """
         config_dict = {'projection': self._coarse_grid.project,
-                  # 'precondition': self._apply_preconditioner}
-                   'precondition': self._apply_multi_preconditioner}
+                   # 'precondition': self._apply_preconditioner}
+                    'precondition': self._apply_multi_preconditioner}
                        #  'multiprecondition': self._apply_multi_preconditioner }
         lambda_rigid = self.initialize_lambda()
 
         self.solver.set_config(config_dict)
-        lambda_sol, info_dict = self.solver.solve(self._F_action, self._residual, lambda_rigid)
-
+        lambda_sol, info_dict = self.solver.solve(self._F_action, self._F_action_single_precon, self._residual, lambda_rigid)
         alpha_sol = self._coarse_grid.solve(self._F_action(lambda_sol, True))
         alpha_dict = self._coarse_grid.map_vector2localproblem(alpha_sol)
 
@@ -225,6 +224,57 @@ class SerialSolverManager(SolverManagerBase):
         """
         d = self._F_action(v, True)
         return -d
+
+    def _F_action_single_precon(self, v, external_force=False):
+        r"""
+        Application of the input-vector on the FETI-solver's F-operator, such that
+        .. math::
+            \textbf{F}\vec{\lambda}
+        is calculated
+        Parameters
+        ----------
+        v : ndarray
+            dual solution
+        external_force : bool
+            flag that switches on external loads in the local problems. During global iterations only the local-
+            problems' reactions to changes of the dual solution is of interest. External loads are taken into account in
+            the residual and the final solution.
+        Returns
+        -------
+        -d : ndarray
+            cumulated reaction of local problems on the interfaces (in structural mechanics viewed as gaps)
+        """
+        v_dict = self._vector2interfacedict(v)
+        u_dict = {}
+        for problem_id, local_problem in self._local_problems_dict.items():
+            u_dict_local = local_problem.solve(v_dict, external_force)
+            for interface, u_b in u_dict_local.items():
+                if interface not in u_dict:
+                    u_dict[interface] = {problem_id: u_b}
+                else:
+                    u_dict[interface].update({problem_id: u_b})
+
+        # compute gap
+        gap_dict = {}
+        for interface_id, u_dict_interface in u_dict.items():
+            for problem_id, u_b in u_dict_interface.items():
+                if interface_id not in gap_dict:
+                    gap_dict[interface_id] = np.zeros_like(u_b, dtype=complex)
+                gap_dict[interface_id] += u_b
+
+        d = self._interfacedict2vector(gap_dict)
+        return -d
+
+
+
+
+
+
+
+
+
+
+
 
     def _F_action(self, v,  external_force=False):
         r"""
@@ -344,27 +394,18 @@ class SerialSolverManager(SolverManagerBase):
 
 
     def _apply_multi_preconditioner(self, v):
-        """
-        Application of the local preconditioners to a given vector
 
-        Parameters
-        ----------
-        v : ndarray
-            global vector (in structural mechanics often viewed as gaps)
 
-        Returns
-        -------
-        f : ndarray
-            preconditioned dual solution
-        """
         v_dict = self._vector2interfacedict(v)
         f_dict = {}
         f = np.zeros((len(v),self._local_problems_dict.__len__()), dtype= complex)
         icounter = 0
         f_dict_local = {}
+
         for problem_id, local_problem in self._local_problems_dict.items():
             f_dict_local = local_problem.precondition(v_dict)
-            f[:,problem_id-1] = self._interfacedict2vector(f_dict_local)
+            f[:,icounter] = self._interfacedict2vector(f_dict_local)
+            icounter= icounter+1
         return f
 
     def _interfacedict2vector(self, intdict):

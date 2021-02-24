@@ -569,7 +569,7 @@ class M_ORTHOMIN(PCPGsolver):
                              'save_history': True,
                              'full_reorthogonalization': True}
 
-    def solve(self, F_callback, residual_callback, lambda_init):
+    def solve(self, F_callback, F_callback_single_precond, residual_callback, lambda_init):
         """
         Solve-method of the PCPG-method
 
@@ -621,13 +621,23 @@ class M_ORTHOMIN(PCPGsolver):
         # wk = self._project(rk)
         zk = self._precondition(rk)
 
-        # SearchDirections = self._project(zk)
+
         SearchDirections = zk
-        ProjectedSearchDirections = F_callback(SearchDirections)
+        # ProjectedSearchDirectionsND1 = F_callback(SearchDirectionsND)
+
+        # ProjectedSearchDirectionsND2 = np.zeros((SearchDirectionsND.shape[0], SearchDirectionsND.shape[1]), dtype=complex)
+        # for iCounter in range(SearchDirectionsND.shape[1]):
+        #     ProjectedSearchDirectionsND2[:, iCounter] = F_callback_single_precond(SearchDirectionsND[:, iCounter])
+        #
+
+        ProjectedSearchDirections=self.F_callback_loop(SearchDirections, F_callback_single_precond)
 
 
-        Q_dict[0] = ProjectedSearchDirections[:,[0, 1, 2]] #/ np.linalg.norm(ProjectedSearchDirections[:,[1]])
-        W_dict[0] = SearchDirections[:,[0,1, 2]]  #/ np.linalg.norm(ProjectedSearchDirections[:,[1]])
+        # ComputeNorm = np.linalg.norm(ProjectedSearchDirectionsND1 - ProjectedSearchDirectionsND2)
+        # print(ComputeNorm)
+
+        Q_dict[0] = ProjectedSearchDirections[:,[ 1]] / np.linalg.norm(ProjectedSearchDirections[:,[1]])
+        W_dict[0] = SearchDirections[:,[1]] / np.linalg.norm(ProjectedSearchDirections[:,[1]])
         #
 
 
@@ -636,15 +646,15 @@ class M_ORTHOMIN(PCPGsolver):
             info_dict[k] = {}
             Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
 
-            QtQ = np.dot(np.conjugate(Q_dict[k].T), (Q_dict[k]))
-            delta_dict[k] = np.linalg.pinv(QtQ)
+            # QtQ = np.dot(np.conjugate(Q_dict[k].T), (Q_dict[k]))
+            # delta_dict[k] = np.linalg.pinv(QtQ)
             # if QtQ.ndim ==0:
             #     AlphaParameter = Minimizationstep
             # else:
             #     # delta_dict[k] = np.linalg.pinv(QtQ)
             #     # AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
             #     AlphaParameter = Minimizationstep
-            AlphaParameter =np.dot(delta_dict[k],Minimizationstep)
+            AlphaParameter =Minimizationstep
 
 
             lambda_sol = lambda_sol + np.dot(W_dict[k],AlphaParameter)
@@ -655,7 +665,7 @@ class M_ORTHOMIN(PCPGsolver):
             wk = self._project(rk)
             zk = self._precondition(wk)
             SearchDirections = self._project(zk)
-            ProjectedSearchDirections = F_callback(SearchDirections)
+            ProjectedSearchDirections = self.F_callback_loop(SearchDirections, F_callback_single_precond)
 
 
             QtQ = np.dot(np.conjugate(ProjectedSearchDirections.T), (ProjectedSearchDirections))
@@ -663,43 +673,42 @@ class M_ORTHOMIN(PCPGsolver):
 
             Ldecomp, Ddecomp, perm = spp.ldl(QtQ, hermitian=True)
 
-            RankRevealedIndices = np.take(perm, np.arange(0, GetRank).tolist())
+            # RankRevealedIndices = np.take(perm, np.arange(0, GetRank).tolist())
 
-            Lupdate  = Ldecomp[RankRevealedIndices,RankRevealedIndices]
+            # Lupdate  = Ldecomp[RankRevealedIndices,RankRevealedIndices]
             Linverse = np.linalg.pinv(np.conjugate(Ldecomp.T))
             Dinverse = np.linalg.pinv(np.sqrt(Ddecomp))
 
             Qupdated = np.dot(ProjectedSearchDirections, np.dot(Linverse, Dinverse))
             SearchDirectionsUpdated = np.dot(SearchDirections, np.dot(Linverse, Dinverse))
-            StoreColumnId = np.empty((0), dtype=int)
-            for iCounter in range(Qupdated.shape[1]):
+            # StoreColumnId = np.empty((0), dtype=int)
+            # for iCounter in range(Qupdated.shape[1]):
+            #
+            #     if np.linalg.norm(Qupdated[:, iCounter]) < 1e-6:
+            #         StoreColumnId = np.append(StoreColumnId, iCounter)
+            #
+            # Qupdated = np.delete(Qupdated, StoreColumnId, axis=1)
+            # SearchDirectionsUpdated = np.delete(SearchDirectionsUpdated, StoreColumnId, axis=1)
 
-                if np.linalg.norm(Qupdated[:, iCounter]) < 1e-6:
-                    StoreColumnId = np.append(StoreColumnId, iCounter)
-
-            Qupdated = np.delete(Qupdated, StoreColumnId, axis=1)
-            SearchDirectionsUpdated = np.delete(SearchDirectionsUpdated, StoreColumnId, axis=1)
 
 
             W_dict[k+1] = SearchDirectionsUpdated
             Q_dict[k + 1] = Qupdated
             #(np.dot(np.conjugate(Qdecom.T), Qdecom) >= 1e-8) or
-            if  (np.linalg.norm(Q_dict[k+1] - F_callback(W_dict[k+1])) >= 1e-6):
+            if  (np.linalg.norm(Q_dict[k+1] - self.F_callback_loop(W_dict[k+1],F_callback_single_precond))) >= 1e-6:
                 print("the basis is inconsistent")
 
 
-            if np.linalg.norm(np.dot(np.conjugate(Q_dict[k+1].T),Q_dict[k+1]) - np.linalg.norm(np.linalg.matrix_rank(QtQ))):
+            if np.linalg.norm(np.dot(np.conjugate(Q_dict[k+1].T),Q_dict[k+1]) - np.linalg.norm(np.linalg.matrix_rank(QtQ))) <= 1e-6:
                 print("the basis is inconsistent")
 
-
-
-            ActualResidual = np.linalg.norm(InitialResidual - F_callback(lambda_sol))/np.linalg.norm(InitialResidual)
 
             if self._config_dict['full_reorthogonalization']:
                 for i in range(k+1):
 
                     Numerator = np.dot( np.conjugate(Q_dict[i].T), Q_dict[k + 1])
-                    beta_ik = np.dot(delta_dict[i], Numerator)
+                    # beta_ik = np.dot(delta_dict[i], Numerator)
+                    beta_ik = Numerator
                     W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],(beta_ik))
                     Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
 
@@ -746,6 +755,12 @@ class M_ORTHOMIN(PCPGsolver):
         info_dict['residual'] = norm_wk
         return lambda_sol, info_dict
 
+    def F_callback_loop(self, SD, F_callback_single_precond):
+        ProjecctedSD = np.zeros((SD.shape[0], SD.shape[1]))
+        for iCounter in range(SD.shape[1]):
+            ProjecctedSD[:, iCounter] = F_callback_single_precond(SD[:, iCounter])
+
+        return ProjecctedSD
 
 
 class ORTHOMINsolver(PCPGsolver):
@@ -902,4 +917,5 @@ class ORTHOMINsolver(PCPGsolver):
         info_dict['Projected_search_direction'] = Proj_V
 
         return lambda_sol, info_dict
+
 

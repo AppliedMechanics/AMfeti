@@ -616,15 +616,14 @@ class M_ORTHOMIN(PCPGsolver):
         Intialnorm = np.linalg.norm(rk)
         zk = self._precondition(rk)
 
-
         SearchDirections = zk
         ProjectedSearchDirections=self.F_callback_loop(SearchDirections, F_callback_single_precond)
 
-        Q_dict[0], W_dict[0] = self.DeleteZeroSearchdirection(ProjectedSearchDirections, SearchDirections, 1e-2)
-        Q_dict[0], W_dict[0] = self.OrthonormalStep(Q_dict[0], W_dict[0])
+        Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(ProjectedSearchDirections, SearchDirections)
+        Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized, SearchDirectionsorthoginalized)
+        Q_dict[0], W_dict[0] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
 
         print('starting loop')
-
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
@@ -635,8 +634,8 @@ class M_ORTHOMIN(PCPGsolver):
             rk = rk - np.dot(Q_dict[k], (AlphaParameter))
             ActualResidual = np.linalg.norm(residual_callback(lambda_sol))
 
-            print('Residue = %4.2e', np.linalg.norm(rk))
-            print('Actual Residue = %4.2e', ActualResidual)
+            print('Residue        = ', np.linalg.norm(rk))
+            print('Actual Residue = ', ActualResidual)
             
             wk = self._project(rk)
             zk = self._precondition(wk)
@@ -648,33 +647,20 @@ class M_ORTHOMIN(PCPGsolver):
             if self._config_dict['full_reorthogonalization']:
                 for i in range(k+1):
                     Numerator = np.dot( np.conjugate(Q_dict[i].T), Q_dict[k + 1])
-                    beta_ik = Numerator
+                    beta_ik   = Numerator
                     W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],(beta_ik))
-                    Q_dict[k+1]=  Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
+                    Q_dict[k+1] = Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
 
             if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
-                print("the basis is inconsistent before orthogonalization")
+                print("-----the basis is inconsistent after orthogonalization wrt vector blocks-----")
 
-            QtQ = np.dot(np.conjugate(Q_dict[k+1].T), (Q_dict[k+1]))
-            GetRank = np.linalg.matrix_rank(Q_dict[k+1])
-            print('the rank of the matrix of projected search direction is :',GetRank)
-            Ldecomp, Ddecomp, perm = spp.ldl(QtQ, hermitian=True)
-
-            Linverse = np.linalg.pinv(np.conjugate(Ldecomp.T))
-            Dinverse = np.linalg.pinv(np.sqrt(Ddecomp))
-
-            Qupdated = np.dot(Q_dict[k+1], np.dot(Linverse, Dinverse))
-            SearchDirectionsUpdated = np.dot(W_dict[k+1], np.dot(Linverse, Dinverse))
-
-            Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qupdated, SearchDirectionsUpdated)
-
-            print('The number of vevtors stored is ', Qupdated.shape[1])
-            print('The number of vevtors stored is ', SearchDirectionsUpdated.shape[1])
-
+            Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(Q_dict[k+1], W_dict[k+1])
+            Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized, SearchDirectionsorthoginalized)
             Q_dict[k + 1], W_dict[k + 1] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
-
-            if np.linalg.norm(np.dot(np.conjugate(Q_dict[k+1].T),Q_dict[k+1]) - np.linalg.norm(np.linalg.matrix_rank(QtQ))) <= 1e-6:
-                print("the basis is inconsistent after orthogonilization")
+            print('The number of vectors stored is                                      :', Qupdated.shape[1])
+            print('the rank of the matrix of projected search direction after filtering :', np.linalg.matrix_rank(Qupdated))
+            if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
+                print("-----the basis is inconsistent after orthogonalization wrt each other-----")
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -685,7 +671,6 @@ class M_ORTHOMIN(PCPGsolver):
                 logging.info(
                     'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
                 if norm_wk <= self._config_dict['tolerance']:
-                    # evaluate the exact norm
                     _norm_wk = np.linalg.norm(wk)
                     if _norm_wk <= self._config_dict['tolerance']:
                         logger.info('PCPG has converged after %i' % (k + 1))
@@ -696,7 +681,6 @@ class M_ORTHOMIN(PCPGsolver):
                 if norm_wk <= self._config_dict['tolerance']:
                     logger.info('PCPG has converged after %i' % (k + 1))
                     break
-
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
@@ -722,7 +706,6 @@ class M_ORTHOMIN(PCPGsolver):
         ProjecctedSD = np.zeros((SD.shape[0], SD.shape[1]), dtype=complex)
         for iCounter in range(SD.shape[1]):
             ProjecctedSD[:, iCounter] = F_callback_single_precond(SD[:, iCounter])
-
         return ProjecctedSD
 
     def OrthonormalStep(self, NDArrayProjVectors, NDArraySearchVectors):
@@ -730,6 +713,19 @@ class M_ORTHOMIN(PCPGsolver):
             NDArrayProjVectors[:, iCounter]   = NDArrayProjVectors[:, iCounter]/ np.linalg.norm(NDArrayProjVectors[:, iCounter])
             NDArraySearchVectors[:, iCounter] = NDArraySearchVectors[:, iCounter] /np.linalg.norm(NDArrayProjVectors[:, iCounter])
         return NDArrayProjVectors, NDArraySearchVectors
+
+    def OrthogonalizeVectors(self, NDArrayProjVectors, NDArraySearchVectors):
+        QtQ = np.dot(np.conjugate(NDArrayProjVectors.T), (NDArrayProjVectors))
+        GetRank = np.linalg.matrix_rank(NDArrayProjVectors)
+        print('the rank of the matrix of projected search direction is :', GetRank)
+        Ldecomp, Ddecomp, perm = spp.ldl(QtQ, hermitian=True)
+
+        Linverse = np.linalg.pinv(np.conjugate(Ldecomp.T))
+        Dinverse = np.linalg.pinv(np.sqrt(Ddecomp))
+
+        Qupdated = np.dot(NDArrayProjVectors, np.dot(Linverse, Dinverse))
+        SearchDirectionsUpdated = np.dot(NDArraySearchVectors, np.dot(Linverse, Dinverse))
+        return Qupdated, SearchDirectionsUpdated
 
     def DeleteZeroSearchdirection(self, NDArrayProjVectors, NDArraySearchVectors, tol = 1e-6):
         StoreColumnId = np.empty((0), dtype=int)

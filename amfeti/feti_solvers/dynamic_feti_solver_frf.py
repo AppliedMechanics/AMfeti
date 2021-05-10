@@ -63,7 +63,7 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                          'preconditioner':None,
                          'preconditioner_matrix':'stiffness',
                          'scaling': MultiplicityScaling(),
-                         'global_solver': PCPGsolver()})
+                         'global_solver': PCPGsolver(), 'recycling' : False})
         self.update_preconditioner = True
         self.number_precon_updates = 0
         self.set_config(kwargs)
@@ -120,7 +120,9 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
 
 
 
-    def solve(self):
+
+    def solve(self,SD):
+
         """
         Runs the solver-manager's solve-method.
 
@@ -137,6 +139,8 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
         K_dict = self._config_dict['K_dict']
         alphaK = self._config_dict['damping_coefficient']['alpha']
         betaM = self._config_dict['damping_coefficient']['beta']
+        # SD = self.set_config['SearchDirections']
+        # PSD = self.set_config['ProjectedSearchDirections']
         solution_dict =  dict()
         buildZ = lambda w, M, K, alpha, beta: -(w * w * M) + K + (1J * w * (alpha * K + beta * M))
         def build_Z_dict(w, M_dict, K_dict, alpha=0.0000001, beta=0.0001):
@@ -151,7 +155,8 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
             self.set_config({'Z_dict': Z_dict_})
             self._update_local_problems()
             self._solver_manager.update()
-            self._solver_manager.solve()
+            # self._solver_manager.solve()
+            self._solver_manager.solve(SD)
             solution_dict[0] = deepcopy(self._solver_manager.solution)
             print("Frequency = %d : GMRES iteration %d"
                   % (w_list, solution_dict[0].solver_information['Iterations']))

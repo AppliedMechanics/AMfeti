@@ -21,7 +21,6 @@ from scipy.sparse.linalg import spsolve
 __all__ = ['PCPGsolver',
            'GMRESsolver',
            'ORTHOMINsolver',
-           'M_PCPGsolver',
            'M_ORTHOMIN']
 
 
@@ -34,182 +33,181 @@ class GlobalSolverBase(ConfigBase):
 
 
 
-
-class M_PCPGsolver(GlobalSolverBase):
-    """
-    Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
-    problem. This solver is an extension of the well-known iterative Conjugate Gradient methods by a preconditioner and
-    a nullspace-projection for singular problems. Moreover, this solver supports full reorthogonalization, which is able
-    to improve convergence, if F-orthogonality degrades during the iterations.
-
-    References
-    ----------
-    [1]  D.J. Rixen and C. Farhat (1999): A simple and efficient extension of a class of substructure based
-         preconditioners to heterogeneous structural mechanics problems. International Journal for Numerical Methods in
-         Engineering 44 489--516.
-    [2]  C. Farhat and F.X. Roux (1994): Implicit parallel processing in structural mechanics. Computational Mechanics
-         Advances 2 1--124.
-    [3]  M.C. Leistner, P. Gosselet, D.J. Rixen (2018): Recycling of solution spaces in multipreconditioned FETI methods
-         applied to structural dynamics. International Journal of Numerical Methods in Engineering 116 141--160
-         doi:10.1002/nme.5918.
-
-    Attributes
-    ----------
-    _config_dict : dict
-        configuration dictionary
-    """
-    def __init__(self):
-        """
-        Parameters
-        ----------
-        None
-        """
-        super().__init__()
-        self._config_dict = {'tolerance': 1e-7,
-                             'max_iter': None,
-                             'projection': None,
-                             'precondition': None,
-                             'energy_norm': False,
-                             'save_history': False,
-                             'full_reorthogonalization': True}
-
-    def solve(self, F_callback, residual_callback, lambda_init):
-        """
-        Solve-method of the PCPG-method
-
-        Parameters
-        ----------
-        F_callback : callable
-            method, that applies the solution-vector on the system-matrix F and returns the result
-        residual_callback : callable
-            method, that calculates and return the system's residual from the solution-vector
-        lambda_init : ndarray
-            initial guess for the solution
-
-        Returns
-        -------
-        lambda_sol : ndarray
-            calculated solution
-        info_dict : dict
-            general information on the solution-process
-        """
-        logger = logging.getLogger(__name__)
-
-        interface_size = len(lambda_init)
-
-        if self._config_dict['max_iter'] is None:
-            self._config_dict['max_iter'] = int(1 * interface_size)
-
-        logger.info('Setting PCPG tolerance = %4.2e' % self._config_dict['tolerance'])
-        logger.info('Setting PCPG max number of iterations = %i' % self._config_dict['max_iter'])
-
-        # initialize variables
-        info_dict = {}
-        global_start_time = time.time()
-        residual_hist = np.array([])
-        lambda_hist = np.array([])
-
-        """ Initialize the storage vectors"""
-        W_dict = {}
-        Q_dict = {}
-        delta_dict ={}
-
-
-
-        """ Initialize the solution and residual vectors"""
-        lambda_sol = np.zeros_like(lambda_init)
-        rk = residual_callback(lambda_init)
-
-        # SearchDirectionCounter = 0;
-        k = 0
-
-        for k in range(self._config_dict['max_iter']):
-            info_dict[k] = {}
-            wk=rk
-            # wk = self._project(rk)
-            zk = self._precondition(rk)
-            # zk = self._project(zk)
-            # yk = zk
-            W_dict[k] = zk
-            Q_dict[k] = F_callback(zk)
-
-            gamma_i = np.dot(zk.T, rk)
-
-            delta= Matrix(np.dot(Q_dict[k].T, zk))
-            q= delta.apply_inverse(gamma_i)
-            delta_dict.update({k:delta})
-
-
-
-
-            lambda_sol = lambda_sol + np.dot(W_dict[k],q)
-            rk = rk - np.dot(Q_dict[k], q)
-
-
-            if self._config_dict['full_reorthogonalization']:
-                yk1 = zk
-                for i in range(k):
-                    phi_ik = np.dot( Q_dict[k].T, W_dict[k])
-                    W_dict[k] = W_dict[k] - np.dot(W_dict[i],np.dot(delta_dict[i].data,phi_ik ))
-
-
-
-            if self._config_dict['save_history']:
-                lambda_hist = np.append(lambda_hist, lambda_sol)
-                residual_hist = np.append(residual_hist, np.linalg.norm(rk))
-
-            if self._config_dict['energy_norm']:
-                norm_wk = np.sqrt(vn1)
-                logging.info(
-                    'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
-                if norm_wk <= self._config_dict['tolerance']:
-                    # evaluate the exact norm
-                    _norm_wk = np.linalg.norm(wk)
-                    if _norm_wk <= self._config_dict['tolerance']:
-                        logger.info('PCPG has converged after %i' % (k + 1))
-                        logger.info('Iteration = %i, Norm of project residual wk = %2.5e!' % (k, _norm_wk))
-                        break
-            else:
-                norm_wk = np.linalg.norm(rk)
-                if norm_wk <= self._config_dict['tolerance']:
-                    logger.info('PCPG has converged after %i' % (k + 1))
-                    break
-
-
-        if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
-            logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
-            logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
-
-        elapsed_time = time.time() - global_start_time
-        logger.info('#' * 60)
-        logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))
-        logger.info('Number of PCPG Iterations = %i !' % (k + 1))
-        avg_iteration_time = elapsed_time / (k + 1)
-        logger.info('{"avg_iteration_time_PCPG" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
-        logger.info('#' * 60)
-
-        info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
-        info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['PCPG_iterations'] = k + 1
-        info_dict['lambda_hist'] = lambda_hist
-        info_dict['residual_hist'] = residual_hist
-        info_dict['residual'] = norm_wk
-        return lambda_sol, info_dict
-
-    def _precondition(self, v):
-        if self._config_dict['precondition'] is not None:
-            precondition = self._config_dict['precondition']
-            v = precondition(v)
-            return v
-        else:
-            return copy(v)
-
-    def _project(self, v):
-        if self._config_dict['projection'] is not None:
-            project = self._config_dict['projection']
-            v = project(v)
-        return v
-
+#
+# class M_PCPGsolver(GlobalSolverBase):
+#     """
+#     Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
+#     problem. This solver is an extension of the well-known iterative Conjugate Gradient methods by a preconditioner and
+#     a nullspace-projection for singular problems. Moreover, this solver supports full reorthogonalization, which is able
+#     to improve convergence, if F-orthogonality degrades during the iterations.
+#
+#     References
+#     ----------
+#     [1]  D.J. Rixen and C. Farhat (1999): A simple and efficient extension of a class of substructure based
+#          preconditioners to heterogeneous structural mechanics problems. International Journal for Numerical Methods in
+#          Engineering 44 489--516.
+#     [2]  C. Farhat and F.X. Roux (1994): Implicit parallel processing in structural mechanics. Computational Mechanics
+#          Advances 2 1--124.
+#     [3]  M.C. Leistner, P. Gosselet, D.J. Rixen (2018): Recycling of solution spaces in multipreconditioned FETI methods
+#          applied to structural dynamics. International Journal of Numerical Methods in Engineering 116 141--160
+#          doi:10.1002/nme.5918.
+#
+#     Attributes
+#     ----------
+#     _config_dict : dict
+#         configuration dictionary
+#     """
+#     def __init__(self):
+#         """
+#         Parameters
+#         ----------
+#         None
+#         """
+#         super().__init__()
+#         self._config_dict = {'tolerance': 1e-7,
+#                              'max_iter': None,
+#                              'projection': None,
+#                              'precondition': None,
+#                              'energy_norm': False,
+#                              'save_history': False,
+#                              'full_reorthogonalization': True}
+#
+#     def solve(self, F_callback, residual_callback, lambda_init):
+#         """
+#         Solve-method of the PCPG-method
+#
+#         Parameters
+#         ----------
+#         F_callback : callable
+#             method, that applies the solution-vector on the system-matrix F and returns the result
+#         residual_callback : callable
+#             method, that calculates and return the system's residual from the solution-vector
+#         lambda_init : ndarray
+#             initial guess for the solution
+#
+#         Returns
+#         -------
+#         lambda_sol : ndarray
+#             calculated solution
+#         info_dict : dict
+#             general information on the solution-process
+#         """
+#         logger = logging.getLogger(__name__)
+#
+#         interface_size = len(lambda_init)
+#
+#         if self._config_dict['max_iter'] is None:
+#             self._config_dict['max_iter'] = int(1 * interface_size)
+#
+#         logger.info('Setting PCPG tolerance = %4.2e' % self._config_dict['tolerance'])
+#         logger.info('Setting PCPG max number of iterations = %i' % self._config_dict['max_iter'])
+#
+#         # initialize variables
+#         info_dict = {}
+#         global_start_time = time.time()
+#         residual_hist = np.array([])
+#         lambda_hist = np.array([])
+#
+#         """ Initialize the storage vectors"""
+#         W_dict = {}
+#         Q_dict = {}
+#         delta_dict ={}
+#
+#
+#
+#         """ Initialize the solution and residual vectors"""
+#         lambda_sol = np.zeros_like(lambda_init)
+#         rk = residual_callback(lambda_init)
+#
+#         # SearchDirectionCounter = 0;
+#         k = 0
+#
+#         for k in range(self._config_dict['max_iter']):
+#             info_dict[k] = {}
+#             wk=rk
+#             # wk = self._project(rk)
+#             zk = self._precondition(rk)
+#             # zk = self._project(zk)
+#             # yk = zk
+#             W_dict[k] = zk
+#             Q_dict[k] = F_callback(zk)
+#
+#             gamma_i = np.dot(zk.T, rk)
+#
+#             delta= Matrix(np.dot(Q_dict[k].T, zk))
+#             q= delta.apply_inverse(gamma_i)
+#             delta_dict.update({k:delta})
+#
+#
+#
+#
+#             lambda_sol = lambda_sol + np.dot(W_dict[k],q)
+#             rk = rk - np.dot(Q_dict[k], q)
+#
+#
+#             if self._config_dict['full_reorthogonalization']:
+#                 yk1 = zk
+#                 for i in range(k):
+#                     phi_ik = np.dot( Q_dict[k].T, W_dict[k])
+#                     W_dict[k] = W_dict[k] - np.dot(W_dict[i],np.dot(delta_dict[i].data,phi_ik ))
+#
+#
+#
+#             if self._config_dict['save_history']:
+#                 lambda_hist = np.append(lambda_hist, lambda_sol)
+#                 residual_hist = np.append(residual_hist, np.linalg.norm(rk))
+#
+#             if self._config_dict['energy_norm']:
+#                 norm_wk = np.sqrt(vn1)
+#                 logging.info(
+#                     'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
+#                 if norm_wk <= self._config_dict['tolerance']:
+#                     # evaluate the exact norm
+#                     _norm_wk = np.linalg.norm(wk)
+#                     if _norm_wk <= self._config_dict['tolerance']:
+#                         logger.info('PCPG has converged after %i' % (k + 1))
+#                         logger.info('Iteration = %i, Norm of project residual wk = %2.5e!' % (k, _norm_wk))
+#                         break
+#             else:
+#                 norm_wk = np.linalg.norm(rk)
+#                 if norm_wk <= self._config_dict['tolerance']:
+#                     logger.info('PCPG has converged after %i' % (k + 1))
+#                     break
+#
+#
+#         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
+#             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
+#             logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
+#
+#         elapsed_time = time.time() - global_start_time
+#         logger.info('#' * 60)
+#         logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))
+#         logger.info('Number of PCPG Iterations = %i !' % (k + 1))
+#         avg_iteration_time = elapsed_time / (k + 1)
+#         logger.info('{"avg_iteration_time_PCPG" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
+#         logger.info('#' * 60)
+#
+#         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
+#         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
+#         info_dict['PCPG_iterations'] = k + 1
+#         info_dict['lambda_hist'] = lambda_hist
+#         info_dict['residual_hist'] = residual_hist
+#         info_dict['residual'] = norm_wk
+#         return lambda_sol, info_dict
+#
+#     def _precondition(self, v):
+#         if self._config_dict['precondition'] is not None:
+#             precondition = self._config_dict['precondition']
+#             v = precondition(v)
+#             return v
+#         else:
+#             return copy(v)
+#
+#     def _project(self, v):
+#         if self._config_dict['projection'] is not None:
+#             project = self._config_dict['projection']
+#             v = project(v)
+#         return v
 class PCPGsolver(GlobalSolverBase):
     """
     Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
@@ -238,13 +236,14 @@ class PCPGsolver(GlobalSolverBase):
         None
         """
         super().__init__()
-        self._config_dict = {'tolerance': 1e-7,
+        self._config_dict = {'tolerance': 1e-8,
                              'max_iter': None,
                              'projection': None,
                              'precondition': None,
+                             'multiprecondition': None,
                              'energy_norm': False,
                              'save_history': False,
-                             'full_reorthogonalization': False}
+                             'full_reorthogonalization': True}
 
     def solve(self, F_callback, residual_callback, lambda_init):
         """
@@ -284,6 +283,7 @@ class PCPGsolver(GlobalSolverBase):
             Q = dict()
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
+        InitialResidual = rk
         k = 0
 
         for k in range(self._config_dict['max_iter']):
@@ -291,17 +291,22 @@ class PCPGsolver(GlobalSolverBase):
             wk = self._project(rk)
             zk = self._precondition(wk)
             yk = self._project(zk)
+            # wk=rk
+            # zk=wk
+            # yk=zk
+
 
             if self._config_dict['full_reorthogonalization']:
                 yk1 = yk
                 for i in range(k):
                     yki = Y[i]
                     qki = Q[i]
-                    yk -= np.dot(qki, yk1) / np.dot(qki, yki) * yki
+                    Orthoparameter= np.vdot(qki, yk1) / np.vdot(qki, yki)
+                    yk -=  Orthoparameter* yki
             elif k > 0:
-                yk -= np.dot(qk_1, yk) / np.dot(qk_1, yk_1) * yk_1
+                yk -= np.vdot(qk_1, yk) / np.vdot(qk_1, yk_1) * yk_1
 
-            vn1 = np.dot(wk, zk)
+            vn1 = np.vdot(wk, zk)
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -332,12 +337,26 @@ class PCPGsolver(GlobalSolverBase):
                 yk_1 = copy(yk)
                 qk_1 = copy(Fyk)
 
-            aux2 = np.linalg.norm(np.dot(yk, Fyk))
-            alpha_k = float(vn1 / aux2)
+            aux2 = np.linalg.norm(np.vdot(yk, Fyk))
+            alpha_k = (vn1 / aux2)
 
-            lambda_sol += alpha_k * yk
+            lambda_sol = lambda_sol +  Y[k]*alpha_k
 
-            rk -= alpha_k * Fyk
+            rk = rk - alpha_k * Q[k]
+            ComputeError = np.linalg.norm(rk - (InitialResidual- F_callback(lambda_sol)))
+
+
+            print('The difference between the residuals is ',ComputeError)
+
+            BasisError = np.linalg.norm(Fyk- F_callback(yk))
+
+            if BasisError >1e-6:
+                print('The basis  is inconsistent ', BasisError)
+
+            print('The CG residual is ',np.linalg.norm(rk))
+
+            solution = residual_callback(lambda_sol)
+            print('The actual residual is ',np.linalg.norm(solution))
 
         lambda_sol = self._project(lambda_sol) + lambda_init
 
@@ -355,7 +374,7 @@ class PCPGsolver(GlobalSolverBase):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['PCPG_iterations'] = k + 1
+        info_dict['Iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
@@ -364,6 +383,14 @@ class PCPGsolver(GlobalSolverBase):
     def _precondition(self, v):
         if self._config_dict['precondition'] is not None:
             precondition = self._config_dict['precondition']
+            v = precondition(v)
+            return v
+        else:
+            return copy(v)
+
+    def _multiprecondition(self, v):
+        if self._config_dict['precondition'] is not None:
+            precondition = self._config_dict['multiprecondition']
             v = precondition(v)
             return v
         else:
@@ -567,9 +594,10 @@ class M_ORTHOMIN(PCPGsolver):
                              'projection': None,
                              'energy_norm': False,
                              'save_history': True,
-                             'full_reorthogonalization': True}
+                             'full_reorthogonalization': True,
+                             'Recycling': True}
 
-    def solve(self, F_callback, F_callback_single_precond, residual_callback, lambda_init):
+    def solve(self, F_callback, F_callback_single_precond, residual_callback, lambda_init,SD):
         """
         Solve-method of the PCPG-method
 
@@ -611,26 +639,61 @@ class M_ORTHOMIN(PCPGsolver):
 
         """ Initialize the solution and residual vectors"""
         lambda_sol = np.zeros_like(lambda_init)
-        rk = residual_callback(lambda_init)
-        InitialResidual = rk
-        Intialnorm = np.linalg.norm(rk)
-        zk = self._precondition(rk)
+        rk = residual_callback(lambda_sol)
 
-        SearchDirections = zk
-        ProjectedSearchDirections=self.F_callback_loop(SearchDirections, F_callback_single_precond)
 
-        Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(ProjectedSearchDirections, SearchDirections)
-        Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized, SearchDirectionsorthoginalized)
+        if self._config_dict['Recycling'] is True:
+            NDArraySearchVectors = SD
+
+
+            if NDArraySearchVectors.size == 0 :
+                print('First sweep no recycling')
+                SearchDirectionsUpdated= rk
+                Qupdated = F_callback(SearchDirectionsUpdated)
+
+            else:
+                NDArraySearchVectors = SD
+                NDArrayProjVectors = self.F_callback_loop(NDArraySearchVectors, F_callback_single_precond)
+                NDArrayProjVectors, NDArraySearchVectors = self.OrthogonalizeVectors(NDArrayProjVectors,
+                                                                                     NDArraySearchVectors)
+                NDArrayProjVectors, NDArraySearchVectors = self.OrthonormalStep(NDArrayProjVectors, NDArraySearchVectors)
+
+
+
+                rk, lambda_sol = self.ComputeInitialResidual(NDArrayProjVectors, NDArraySearchVectors,lambda_sol, rk,F_callback)
+
+                print('The residual of ORTHOMIN after recycling is :',np.linalg.norm(rk))
+                print('The actual residual of the system is ', np.linalg.norm(residual_callback(lambda_sol)))
+
+                zk = self._multiprecondition(rk)
+
+                SearchDirections = zk
+                ProjectedSearchDirections=self.F_callback_loop(SearchDirections, F_callback_single_precond)
+                Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(ProjectedSearchDirections,
+                                                                           SearchDirections)
+                Qupdated,SearchDirectionsUpdated = self.RecyclingOrthogonalization(NDArrayProjVectors,NDArraySearchVectors,Qupdated,SearchDirectionsUpdated,F_callback_single_precond)
+
+        else:
+
+            zk = self._multiprecondition(rk)
+            SearchDirections = zk
+            ProjectedSearchDirections = self.F_callback_loop(SearchDirections, F_callback_single_precond)
+            Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(ProjectedSearchDirections, SearchDirections)
+            Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized,
+                                                                               SearchDirectionsorthoginalized)
+
+
         Q_dict[0], W_dict[0] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
 
         print('starting loop')
-
+        Counter = 0
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
             Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
             AlphaParameter =Minimizationstep
 
-            lambda_sol = lambda_sol + np.dot(W_dict[k],AlphaParameter)
+            FilteringParameter = np.dot(W_dict[k],AlphaParameter)
+            lambda_sol = lambda_sol + FilteringParameter
             rk = rk - np.dot(Q_dict[k], (AlphaParameter))
             ActualResidual = np.linalg.norm(residual_callback(lambda_sol))
 
@@ -638,9 +701,21 @@ class M_ORTHOMIN(PCPGsolver):
             print('Actual Residue = ', ActualResidual)
             
             wk = self._project(rk)
-            zk = self._precondition(wk)
-            SearchDirections = self._project(zk)
-            ProjectedSearchDirections = self.F_callback_loop(SearchDirections, F_callback_single_precond)
+            zk = self._multiprecondition(wk)
+
+            RelaxTolerance = 1
+
+            if np.linalg.norm(rk) > self._config_dict['tolerance']*RelaxTolerance :
+
+                zk = self._multiprecondition(wk)
+                SearchDirections = self._project(zk)
+                ProjectedSearchDirections = self.F_callback_loop(SearchDirections, F_callback_single_precond)
+            else:
+                zk = self._precondition(wk)
+                SearchDirections = self._project(zk)
+                SearchDirections.shape = (lambda_sol.size,1)
+                ProjectedSearchDirections = F_callback(SearchDirections)
+
 
             W_dict[k+1] = SearchDirections
             Q_dict[k+1] = ProjectedSearchDirections
@@ -651,20 +726,31 @@ class M_ORTHOMIN(PCPGsolver):
                     W_dict[k+1] = W_dict[k+1] - np.dot(W_dict[i],(beta_ik))
                     Q_dict[k+1] = Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
 
-            if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
-                print("-----the basis is inconsistent after orthogonalization wrt vector blocks-----")
 
-            Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(Q_dict[k+1], W_dict[k+1])
-            Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized, SearchDirectionsorthoginalized)
-            Q_dict[k + 1], W_dict[k + 1] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
-            print('The number of vectors stored is                                      :', Qupdated.shape[1])
-            print('the rank of the matrix of projected search direction after filtering :', np.linalg.matrix_rank(Qupdated))
-            if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
-                print("-----the basis is inconsistent after orthogonalization wrt each other-----")
+            # if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
+            #     print("-----the basis is inconsistent after orthogonalization wrt vector blocks-----")
+
+            if  Q_dict[k+1].shape[1] == 1:
+
+                print('Only single preconditioning now')
+
+            else:
+                Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(Q_dict[k+1], W_dict[k+1])
+
+                Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized, SearchDirectionsorthoginalized)
+
+                print('The number of vectors stored is:', Qupdated.shape[1])
+                print('the rank of the matrix of projected search direction after filtering :', np.linalg.matrix_rank(Qupdated))
+                Q_dict[k + 1], W_dict[k + 1] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
+                Counter+= W_dict[k+1].shape[1]
+            # if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
+            #     print("-----the basis is inconsistent after orthogonalization wrt each other-----")
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
                 residual_hist = np.append(residual_hist, np.linalg.norm(rk))
+
+
 
             if self._config_dict['energy_norm']:
                 norm_wk = np.sqrt(vn1)
@@ -696,11 +782,43 @@ class M_ORTHOMIN(PCPGsolver):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['Iterations'] = k + 1
+        info_dict['Iterations'] = Counter
+        print('The total SD stored are :',Counter )
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
+
+        if self._config_dict['Recycling'] is True:
+
+            MaxVectors = 20
+            RecyclableSearchDirections = np.array([])
+            iCounter = 0
+            for iNrVectors in range(k):
+
+                if len(RecyclableSearchDirections) == 0 :
+                    RecyclableSearchDirections = W_dict[iNrVectors]
+
+                else:
+                    RecyclableSearchDirections = np.append(RecyclableSearchDirections,W_dict[iNrVectors],axis=1)
+
+
+
+
+            info_dict['P_SearchDirections'] = RecyclableSearchDirections
+
+        else:
+            info_dict['P_SearchDirections'] = []
+            info_dict['P_ProjSearchDirections'] = []
+
         return lambda_sol, info_dict
+
+    def _Basis_Check(self,ProjVectors, SearchVectors,F_callback_single_precond):
+
+        if (np.linalg.norm(ProjVectors - self.F_callback_loop(SearchVectors, F_callback_single_precond))) >= 1e-6:
+            print("-----the basis is inconsistent, fix the bug in the code")
+
+        else:
+            print('Good to proceed')
 
     def F_callback_loop(self, SD, F_callback_single_precond):
         ProjecctedSD = np.zeros((SD.shape[0], SD.shape[1]), dtype=complex)
@@ -709,12 +827,23 @@ class M_ORTHOMIN(PCPGsolver):
         return ProjecctedSD
 
     def OrthonormalStep(self, NDArrayProjVectors, NDArraySearchVectors):
-        for iCounter in range(NDArrayProjVectors.shape[1]):
-            NDArrayProjVectors[:, iCounter]   = NDArrayProjVectors[:, iCounter]/ np.linalg.norm(NDArrayProjVectors[:, iCounter])
-            NDArraySearchVectors[:, iCounter] = NDArraySearchVectors[:, iCounter] /np.linalg.norm(NDArrayProjVectors[:, iCounter])
+        SizeOfInterfaceProblem= self._config_dict['max_iter']
+        if NDArraySearchVectors.size == SizeOfInterfaceProblem :
+            print('Only 1 vector to orthonormalize')
+            Norm = np.linalg.norm(NDArrayProjVectors)
+            NDArraySearchVectors= NDArraySearchVectors/Norm
+            NDArrayProjVectors = NDArrayProjVectors/Norm
+            NDArrayProjVectors.shape = (SizeOfInterfaceProblem,1)
+            NDArraySearchVectors.shape = (SizeOfInterfaceProblem,1)
+        else:
+            for iCounter in range(NDArrayProjVectors.shape[1]):
+                NDArrayProjVectors[:, iCounter]   = NDArrayProjVectors[:, iCounter]/ np.linalg.norm(NDArrayProjVectors[:, iCounter])
+                NDArraySearchVectors[:, iCounter] = NDArraySearchVectors[:, iCounter] /np.linalg.norm(NDArrayProjVectors[:, iCounter])
         return NDArrayProjVectors, NDArraySearchVectors
 
     def OrthogonalizeVectors(self, NDArrayProjVectors, NDArraySearchVectors):
+
+
         QtQ = np.dot(np.conjugate(NDArrayProjVectors.T), (NDArrayProjVectors))
         GetRank = np.linalg.matrix_rank(NDArrayProjVectors)
         print('the rank of the matrix of projected search direction is :', GetRank)
@@ -737,6 +866,50 @@ class M_ORTHOMIN(PCPGsolver):
         NDArraySearchVectors = np.delete(NDArraySearchVectors, StoreColumnId, axis=1)
         return NDArrayProjVectors, NDArraySearchVectors
 
+    def ComputeInitialResidual(self, NDArrayProjVectors, NDArraySearchVectors,lambda_init,initial_residual,F_callback):
+
+        Difference_ini = np.linalg.norm(initial_residual - F_callback(lambda_init))
+
+        if Difference_ini >= 1e-6:
+            print('The intial residual in recycling is wrong')
+
+
+        InitialResidual = initial_residual
+        for iCounter in range(NDArrayProjVectors.shape[1]):
+            Minimizationstep = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), InitialResidual)
+            lambda_init = lambda_init + np.dot(NDArraySearchVectors[:,iCounter], Minimizationstep)
+            InitialResidual = InitialResidual - np.dot(NDArrayProjVectors[:,iCounter], (Minimizationstep))
+
+
+        Difference =     np.linalg.norm(InitialResidual - F_callback(lambda_init))
+
+        if Difference >= 1e-6:
+            print('The intial residual in recycling is wrong')
+
+        return  InitialResidual, lambda_init
+
+    def RecyclingOrthogonalization(self, NDArrayProjVectors, NDArraySearchVectors, CurrentProjVectors, CurrentSearchVectors,F_callback_single_precond):
+
+        for iVector in range(CurrentProjVectors.shape[1]):
+
+            for iCounter in range(NDArrayProjVectors.shape[1]):
+                iParameter = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), CurrentProjVectors[:,iVector])
+
+                CurrentSearchVectors[:,iVector] = CurrentSearchVectors[:,iVector] -NDArraySearchVectors[:,iCounter]*iParameter
+                CurrentProjVectors[:,iVector]   = CurrentProjVectors[:,iVector] -  NDArrayProjVectors[:,iCounter]*iParameter
+
+            OrthonormalParamter = np.linalg.norm(CurrentProjVectors[:,iVector])
+            CurrentProjVectors[:, iVector] = CurrentProjVectors[:,iVector]/OrthonormalParamter
+            CurrentSearchVectors[:, iVector] = CurrentSearchVectors[:, iVector]/OrthonormalParamter
+            vk_stack = CurrentSearchVectors[:,iVector][np.newaxis].T
+            NDArraySearchVectors = np.append(NDArraySearchVectors,vk_stack,axis=1)
+            vk_stack = CurrentProjVectors[:, iVector][np.newaxis].T
+            NDArrayProjVectors = np.append(NDArrayProjVectors,vk_stack,axis=1)
+
+        if (np.linalg.norm(NDArrayProjVectors - self.F_callback_loop(NDArraySearchVectors, F_callback_single_precond))) >= 1e-6:
+            print("-----the basis is inconsistent during the orthogonalization of recycling process-----")
+
+        return  NDArraySearchVectors, NDArrayProjVectors
 class ORTHOMINsolver(PCPGsolver):
 
 

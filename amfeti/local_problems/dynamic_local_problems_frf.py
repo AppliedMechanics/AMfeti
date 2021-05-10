@@ -9,7 +9,7 @@ Static local problems, meaning local problems, that don't have a time-integrator
 """
 
 from .local_problem_base import LocalProblemBase
-from amfeti.scaling import MultiplicityScaling
+from amfeti.scaling import MultiplicityScaling, Klumpedscaling
 from amfeti.preconditioners import *
 from amfeti.linalg.datatypes import Matrix
 from amfeti.preconditioners import DirichletPreconditioner as data
@@ -17,6 +17,7 @@ import logging, time
 from copy import copy
 import scipy
 import numpy as np
+
 __all__ = [
     'LinearDynamicLocalProblemFRF'
 ]
@@ -46,6 +47,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
     _config_dict : dict
         dictionary with all configuration-information
     """
+
     def __init__(self, global_id, K, M, B, f, **kwargs):
         """
         Parameters
@@ -66,7 +68,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         self._config_dict = {'pseudoinverse_config': {'method': 'svd',
                                                       'tolerance': 1e-10},
                              'preconditioner': DirichletPreconditioner(),
-                             'scaling': MultiplicityScaling(),
+                             'scaling': Klumpedscaling(),
                              'preconditioner_matrix': 'stiffness',
                              }
         self.set_config(kwargs)
@@ -81,7 +83,6 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         else:
             self.Z = Matrix(K, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
 
-
         self.M = M
         self.f = f
         self.B = dict()
@@ -93,7 +94,6 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
         self._interface_dofs, self._interior_dofs = self._get_interface_and_interior_dofs(self.B)
         self.q = None
-        self.update_preconditioner_and_scaling()
         self.lamda = None
 
     @property
@@ -147,8 +147,8 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
             self._config_dict['scaling'] = MultiplicityScaling()
             logger = logging.getLogger(__name__)
             logger.debug('No scaling was given, while preconditioner was set. Setting scaling to Multiplicity')
-            
-    def update_local_matrices(self,Z):
+
+    def update_local_matrices(self, Z):
         if isinstance(Z, Matrix):
             self.Z = Z
         else:
@@ -183,6 +183,39 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
 
 
 
+
+
+
+    def update_preconditioner_and_k_scaling(self, B_dict, K_dict,local_problem_id):
+        """
+           Updater for preconditioner and scaling, which are defined by the config dictionary
+
+           Parameters
+           ----------
+           None
+
+           Returns
+           -------
+           None
+           """
+        if self.preconditioner is None:
+            self.preconditioner = self._config_dict['preconditioner']
+        if self.scaling is None:
+            self.scaling = self._config_dict['scaling']
+        if self.preconditioner is not None and self.scaling is not None:
+            if self._config_dict['preconditioner_matrix'] == 'stiffness':
+                self.preconditioner.update(self.K, self._interface_dofs)
+            elif self._config_dict['preconditioner_matrix'] == 'dynamic_stiffness':
+                self.preconditioner.update(self.Z, self._interface_dofs)
+            self.scaling.local_stiffness_interface_compute(B_dict, K_dict)
+            local_scaling_update = self.scaling.update(B_dict, K_dict, local_problem_id)
+            self.scaling.scaling_dict = local_scaling_update
+        else:
+            logger = logging.getLogger(__name__)
+            logger.debug('No preconditioner and/or no scaling was specified. Omitting the updating.')
+
+
+
     def solve(self, external_solution_dict, external_force_bool=False, rigid_body_modes=None):
         """
         Solution-method for the local problem
@@ -207,13 +240,13 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         """
         f = self._local_right_hand_side(external_solution_dict, external_force_bool)
 
-        if f.ndim == 1 :
+        if f.ndim == 1:
             q = self.Z.apply_inverse(f)
 
         else:
-            q = np.zeros((self.dimension,f.shape[1]), dtype=complex)
+            q = np.zeros((self.dimension, f.shape[1]), dtype=complex)
             for nrRHS in range(f.shape[1]):
-                q[:,nrRHS] = self.Z.apply_inverse(f[:,nrRHS])
+                q[:, nrRHS] = self.Z.apply_inverse(f[:, nrRHS])
 
         if rigid_body_modes is not None and rigid_body_modes.size is not 0:
             q += self.Z.kernel.dot(rigid_body_modes)
@@ -221,7 +254,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
             self.q = q
         # for interface_id, B in B_items:
 
-            # primal_sol[interface_id] = dof
+        # primal_sol[interface_id] = dof
         return self._distribute_to_interfaces(q)
 
     def correct_primal_solution(self, external_solution_dict, external_force_bool=False, rigid_body_modes=None):
@@ -293,12 +326,12 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
     def _local_right_hand_side(self, external_solution_dict, external_force_bool):
         if not external_force_bool:
 
-            index=  external_solution_dict['interface1'].ndim
+            index = external_solution_dict['interface1'].ndim
 
             if index == 1:
                 f = np.zeros_like((self.f), dtype=complex)
             else:
-                f = np.zeros((self.f.size,external_solution_dict['interface1'].shape[index-1]), dtype=complex)
+                f = np.zeros((self.f.size, external_solution_dict['interface1'].shape[index - 1]), dtype=complex)
         else:
             f = np.copy(self.f)
 
@@ -323,19 +356,17 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
         """
         lambdas = None
         if external_solution_dict is not None:
-            lambdas = np.zeros((self.dimension),dtype=complex)
+            lambdas = np.zeros((self.dimension), dtype=complex)
             for interface_id, B in self.B.items():
-                if external_solution_dict[interface_id].ndim == 1:
+                if external_solution_dict[interface_id].ndim == 1 or external_solution_dict[interface_id].dtype == complex :
                     lambdas = lambdas + B.T.dot(external_solution_dict[interface_id])
                 else:
-                    lambdas = np.zeros((self.dimension,external_solution_dict[interface_id].shape[1]), dtype=complex)
-                    # print(external_solution_dict[interface_id].shape[1])
-                    # for nrHS in range(external_solution_dictp[interface_id].shape[1]):
+                    lambdas = np.zeros((self.dimension, external_solution_dict[interface_id].shape[1]), dtype=complex)
+
                     for nrHS in range(lambdas.shape[1]):
-                        lambdas[:,nrHS] = lambdas[:,nrHS] + B.T.dot(external_solution_dict[interface_id][:,nrHS])
+                        lambdas[:, nrHS] = lambdas[:, nrHS] + B.T.dot(external_solution_dict[interface_id][:, nrHS])
 
         return lambdas
-
 
     def _distribute_to_interfaces(self, q):
         """

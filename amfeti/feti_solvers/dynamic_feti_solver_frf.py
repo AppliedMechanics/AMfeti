@@ -13,12 +13,13 @@ from .feti_solver_base import FetiSolverBase
 from amfeti.local_problems.dynamic_local_problems_frf import LinearDynamicLocalProblemFRF
 from amfeti.solvers import PCPGsolver
 from amfeti.preconditioners import DirichletPreconditioner, LumpedPreconditioner
-from amfeti.scaling import MultiplicityScaling
+from amfeti.scaling import MultiplicityScaling, Klumpedscaling
 from amfeti.nonlinear_solvers import LoadSteppingControl
 import numpy as np
 import logging
-from copy import copy,deepcopy
+from copy import copy, deepcopy
 import scipy
+
 __all__ = ['LinearDynamicFetiSolverFRF']
 
 
@@ -37,7 +38,8 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
     _dual_solution_length : int
         number of global dual degrees of freedom
     """
-    def __init__(self,K_dict, M_dict, B_dict, f_dict, w_list,  **kwargs):
+
+    def __init__(self, K_dict, M_dict, B_dict, f_dict, w_list, **kwargs):
         """
         Parameters
         ----------
@@ -58,11 +60,12 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                          'M_dict': M_dict,
                          'B_dict': B_dict,
                          'f_dict': f_dict,
-                         'frequency' : w_list,
+                         'frequency': w_list,
                          'use_parallel': False,
-                         'preconditioner':None,
-                         'preconditioner_matrix':'stiffness',
+                         'preconditioner': None,
+                         'preconditioner_matrix': 'stiffness',
                          'scaling': MultiplicityScaling(),
+                         'scaling_type': 'multiplicity',
                          'global_solver': PCPGsolver()})
         self.update_preconditioner = True
         self.number_precon_updates = 0
@@ -83,13 +86,20 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
          None
          """
         Z_dict = self._config_dict['Z_dict']
+        B_dict = self._config_dict['B_dict']
+        K_dict = self._config_dict['K_dict']
         for problem_id, Z in self._config_dict['Z_dict'].items():
             self._local_problems[problem_id].update_local_matrices(Z)
             if self.update_preconditioner == True:
                 if problem_id == 1:
-                   print('updating Prconditioner')
-                   self.number_precon_updates = self.number_precon_updates + 1
-                self._local_problems[problem_id].update_preconditioner_and_scaling()
+                    print('updating Prconditioner')
+                    self.number_precon_updates = self.number_precon_updates + 1
+
+                if self._config_dict['scaling_type']=='multiplicity':
+                    self._local_problems[problem_id].update_preconditioner_and_scaling()
+                else:
+                    self._local_problems[problem_id].update_preconditioner_and_k_scaling(B_dict,K_dict,problem_id)
+
 
     def _create_local_problems(self):
         """
@@ -103,19 +113,24 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
         -------
         None
         """
-        
+
         K_dict = self._config_dict['K_dict']
         M_dict = self._config_dict['M_dict']
         B_dict = self._config_dict['B_dict']
         f_dict = self._config_dict['f_dict']
         for problem_id, K in self._config_dict['K_dict'].items():
-            self._local_problems[problem_id] = LinearDynamicLocalProblemFRF(problem_id, K, M_dict[problem_id], B_dict[problem_id],
-                                                                        f_dict[problem_id],pseudoinverse_config = self._config_dict['pseudoinverse_kargs'])
-            
+            self._local_problems[problem_id] = LinearDynamicLocalProblemFRF(problem_id, K, M_dict[problem_id],
+                                                                            B_dict[problem_id],
+                                                                            f_dict[problem_id],
+                                                                            pseudoinverse_config=self._config_dict[
+                                                                                'pseudoinverse_kargs'])
+
             self._local_problems[problem_id].set_config({'preconditioner': copy(self._config_dict['preconditioner']),
-                                                         'preconditioner_matrix':self._config_dict['preconditioner_matrix'],
+                                                         'preconditioner_matrix': self._config_dict[
+                                                             'preconditioner_matrix'],
                                                          'scaling': copy(self._config_dict['scaling'])})
-            self._local_problems[problem_id].update_preconditioner_and_scaling()
+
+
 
 
 
@@ -137,13 +152,15 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
         K_dict = self._config_dict['K_dict']
         alphaK = self._config_dict['damping_coefficient']['alpha']
         betaM = self._config_dict['damping_coefficient']['beta']
-        solution_dict =  dict()
+        solution_dict = dict()
         buildZ = lambda w, M, K, alpha, beta: -(w * w * M) + K + (1J * w * (alpha * K + beta * M))
+
         def build_Z_dict(w, M_dict, K_dict, alpha=0.0000001, beta=0.0001):
             Z_dict = {}
             for key, K in K_dict.items():
                 Z_dict[key] = buildZ(w, M_dict[key], K, alpha, beta)
             return Z_dict
+
         w_list = self._config_dict['frequency']
 
         if w_list.ndim == 0:
@@ -157,17 +174,17 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
                   % (w_list, solution_dict[0].solver_information['Iterations']))
 
         else:
-                for omega in (w_list):
-                    Z_dict_ = build_Z_dict(omega, M_dict, K_dict,alphaK,betaM)
-                    self.set_config({'Z_dict': Z_dict_})
-                    self._update_local_problems()
-                    self._solver_manager.update()
-                    self._solver_manager.solve()
-                    solution_dict[0] = deepcopy(self._solver_manager.solution)
-                    print("Frequency = %d : GMRES iteration %d"
-                          %( omega,solution_dict[0].solver_information['Iterations'] ))
-                print('Solve done')
+            for omega in (w_list):
+                Z_dict_ = build_Z_dict(omega, M_dict, K_dict, alphaK, betaM)
+                self.set_config({'Z_dict': Z_dict_})
+                self._update_local_problems()
+                self._solver_manager.update()
+                self._solver_manager.solve()
+                solution_dict[0] = deepcopy(self._solver_manager.solution)
+                print("Frequency = %d : GMRES iteration %d"
+                      % (omega, solution_dict[0].solver_information['Iterations']))
+            print('Solve done')
         return solution_dict
-    
- 
+
+
 

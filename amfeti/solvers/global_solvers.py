@@ -17,11 +17,12 @@ from scipy import linalg as spp
 from copy import copy
 from scipy.sparse import csr_matrix, hstack, vstack
 from scipy.sparse.linalg import spsolve
+import matplotlib.pyplot as plt
+
 
 __all__ = ['PCPGsolver',
            'GMRESsolver',
            'ORTHOMINsolver',
-           'M_PCPGsolver',
            'M_ORTHOMIN']
 
 
@@ -35,180 +36,6 @@ class GlobalSolverBase(ConfigBase):
 
 
 
-class M_PCPGsolver(GlobalSolverBase):
-    """
-    Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
-    problem. This solver is an extension of the well-known iterative Conjugate Gradient methods by a preconditioner and
-    a nullspace-projection for singular problems. Moreover, this solver supports full reorthogonalization, which is able
-    to improve convergence, if F-orthogonality degrades during the iterations.
-
-    References
-    ----------
-    [1]  D.J. Rixen and C. Farhat (1999): A simple and efficient extension of a class of substructure based
-         preconditioners to heterogeneous structural mechanics problems. International Journal for Numerical Methods in
-         Engineering 44 489--516.
-    [2]  C. Farhat and F.X. Roux (1994): Implicit parallel processing in structural mechanics. Computational Mechanics
-         Advances 2 1--124.
-    [3]  M.C. Leistner, P. Gosselet, D.J. Rixen (2018): Recycling of solution spaces in multipreconditioned FETI methods
-         applied to structural dynamics. International Journal of Numerical Methods in Engineering 116 141--160
-         doi:10.1002/nme.5918.
-
-    Attributes
-    ----------
-    _config_dict : dict
-        configuration dictionary
-    """
-    def __init__(self):
-        """
-        Parameters
-        ----------
-        None
-        """
-        super().__init__()
-        self._config_dict = {'tolerance': 1e-7,
-                             'max_iter': None,
-                             'projection': None,
-                             'precondition': None,
-                             'energy_norm': False,
-                             'save_history': False,
-                             'full_reorthogonalization': True}
-
-    def solve(self, F_callback, residual_callback, lambda_init):
-        """
-        Solve-method of the PCPG-method
-
-        Parameters
-        ----------
-        F_callback : callable
-            method, that applies the solution-vector on the system-matrix F and returns the result
-        residual_callback : callable
-            method, that calculates and return the system's residual from the solution-vector
-        lambda_init : ndarray
-            initial guess for the solution
-
-        Returns
-        -------
-        lambda_sol : ndarray
-            calculated solution
-        info_dict : dict
-            general information on the solution-process
-        """
-        logger = logging.getLogger(__name__)
-
-        interface_size = len(lambda_init)
-
-        if self._config_dict['max_iter'] is None:
-            self._config_dict['max_iter'] = int(1 * interface_size)
-
-        logger.info('Setting PCPG tolerance = %4.2e' % self._config_dict['tolerance'])
-        logger.info('Setting PCPG max number of iterations = %i' % self._config_dict['max_iter'])
-
-        # initialize variables
-        info_dict = {}
-        global_start_time = time.time()
-        residual_hist = np.array([])
-        lambda_hist = np.array([])
-
-        """ Initialize the storage vectors"""
-        W_dict = {}
-        Q_dict = {}
-        delta_dict ={}
-
-
-
-        """ Initialize the solution and residual vectors"""
-        lambda_sol = np.zeros_like(lambda_init)
-        rk = residual_callback(lambda_init)
-
-        # SearchDirectionCounter = 0;
-        k = 0
-
-        for k in range(self._config_dict['max_iter']):
-            info_dict[k] = {}
-            wk=rk
-            # wk = self._project(rk)
-            zk = self._precondition(rk)
-            # zk = self._project(zk)
-            # yk = zk
-            W_dict[k] = zk
-            Q_dict[k] = F_callback(zk)
-
-            gamma_i = np.dot(zk.T, rk)
-
-            delta= Matrix(np.dot(Q_dict[k].T, zk))
-            q= delta.apply_inverse(gamma_i)
-            delta_dict.update({k:delta})
-
-
-
-
-            lambda_sol = lambda_sol + np.dot(W_dict[k],q)
-            rk = rk - np.dot(Q_dict[k], q)
-
-
-            if self._config_dict['full_reorthogonalization']:
-                yk1 = zk
-                for i in range(k):
-                    phi_ik = np.dot( Q_dict[k].T, W_dict[k])
-                    W_dict[k] = W_dict[k] - np.dot(W_dict[i],np.dot(delta_dict[i].data,phi_ik ))
-
-
-
-            if self._config_dict['save_history']:
-                lambda_hist = np.append(lambda_hist, lambda_sol)
-                residual_hist = np.append(residual_hist, np.linalg.norm(rk))
-
-            if self._config_dict['energy_norm']:
-                norm_wk = np.sqrt(vn1)
-                logging.info(
-                    'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
-                if norm_wk <= self._config_dict['tolerance']:
-                    # evaluate the exact norm
-                    _norm_wk = np.linalg.norm(wk)
-                    if _norm_wk <= self._config_dict['tolerance']:
-                        logger.info('PCPG has converged after %i' % (k + 1))
-                        logger.info('Iteration = %i, Norm of project residual wk = %2.5e!' % (k, _norm_wk))
-                        break
-            else:
-                norm_wk = np.linalg.norm(rk)
-                if norm_wk <= self._config_dict['tolerance']:
-                    logger.info('PCPG has converged after %i' % (k + 1))
-                    break
-
-
-        if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
-            logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
-            logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
-
-        elapsed_time = time.time() - global_start_time
-        logger.info('#' * 60)
-        logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))
-        logger.info('Number of PCPG Iterations = %i !' % (k + 1))
-        avg_iteration_time = elapsed_time / (k + 1)
-        logger.info('{"avg_iteration_time_PCPG" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
-        logger.info('#' * 60)
-
-        info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
-        info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['PCPG_iterations'] = k + 1
-        info_dict['lambda_hist'] = lambda_hist
-        info_dict['residual_hist'] = residual_hist
-        info_dict['residual'] = norm_wk
-        return lambda_sol, info_dict
-
-    def _precondition(self, v):
-        if self._config_dict['precondition'] is not None:
-            precondition = self._config_dict['precondition']
-            v = precondition(v)
-            return v
-        else:
-            return copy(v)
-
-    def _project(self, v):
-        if self._config_dict['projection'] is not None:
-            project = self._config_dict['projection']
-            v = project(v)
-        return v
 
 class PCPGsolver(GlobalSolverBase):
     """
@@ -240,11 +67,11 @@ class PCPGsolver(GlobalSolverBase):
         super().__init__()
         self._config_dict = {'tolerance': 1e-7,
                              'max_iter': None,
-                             'projection': None,
-                             'precondition': None,
+                             'projection': False,
+                             'precondition': False,
                              'energy_norm': False,
-                             'save_history': False,
-                             'full_reorthogonalization': False}
+                             'save_history': True,
+                             'full_reorthogonalization': True}
 
     def solve(self, F_callback, residual_callback, lambda_init):
         """
@@ -285,30 +112,55 @@ class PCPGsolver(GlobalSolverBase):
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
         k = 0
+        AuxilaryVariable1 = np.array([])
+        AuxilaryVariable2 = np.array([])
 
-        for k in range(self._config_dict['max_iter']):
+        OrthogonalProduct = np.array([])
+        for k in range(self._config_dict['max_iter']+20):
+
+
             info_dict[k] = {}
+
+            # Project the residual to get a better guess
             wk = self._project(rk)
+
+            # Precondition the projected residual to compute appropriate forcing corrections
             zk = self._precondition(wk)
+
+            # Re-projection
             yk = self._project(zk)
 
+
+
             if self._config_dict['full_reorthogonalization']:
+
+                # yk1 is the projected search direction for the current iteration
                 yk1 = yk
+
                 for i in range(k):
                     yki = Y[i]
                     qki = Q[i]
-                    yk -= np.dot(qki, yk1) / np.dot(qki, yki) * yki
+                    # print('Basis error is', np.linalg.norm(qki - F_callback(yki)))
+                    beta_coeff = np.dot(Q[i], yk1) / np.dot(Q[i], Y[i])
+                    yk = yk -  beta_coeff*Y[i]
+
+                # yk = yk/ np.linalg.norm(yk)
             elif k > 0:
                 yk -= np.dot(qk_1, yk) / np.dot(qk_1, yk_1) * yk_1
 
-            vn1 = np.dot(wk, zk)
+
+            print('The norm of yk is :', np.linalg.norm(yk))
+
+
+            # Alpha numerator depends on residual and the preconditioned residual
+            Alpha_numerator = np.dot(rk, zk)
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
                 residual_hist = np.append(residual_hist, np.linalg.norm(rk))
 
             if self._config_dict['energy_norm']:
-                norm_wk = np.sqrt(vn1)
+                norm_wk = np.sqrt(Alpha_numerator)
                 logging.info(
                     'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
                 if norm_wk <= self._config_dict['tolerance']:
@@ -324,26 +176,79 @@ class PCPGsolver(GlobalSolverBase):
                     logger.info('PCPG has converged after %i' % (k + 1))
                     break
 
-            Fyk = F_callback(yk)
+            qik = F_callback(yk)
+            print('The norm of Fyk is:', np.linalg.norm(qik))
             if self._config_dict['full_reorthogonalization']:
                 Y[k] = copy(yk)
-                Q[k] = copy(Fyk)
+                Q[k] = copy(qik)
+
+                if k> 0:
+                    OrthogonalProduct_k = np.dot(np.conjugate(Y[k]), F_callback(Y[k - 1]))
+                    OrthogonalProduct = np.append(OrthogonalProduct, OrthogonalProduct_k)
+
             else:
                 yk_1 = copy(yk)
-                qk_1 = copy(Fyk)
+                qk_1 = copy(qik)
 
-            aux2 = np.linalg.norm(np.dot(yk, Fyk))
-            alpha_k = float(vn1 / aux2)
+
+            Alpha_denominator = np.linalg.norm(np.dot(yk, qik))
+            # aux2 = ScalingParameter*aux2
+            alpha_k = float((Alpha_numerator) /Alpha_denominator)
+
+
+
+            AuxilaryVariable1= np.append(AuxilaryVariable1,Alpha_denominator)
+            AuxilaryVariable2 = np.append(AuxilaryVariable2,Alpha_numerator)
 
             lambda_sol += alpha_k * yk
 
-            rk -= alpha_k * Fyk
+            print('Actual residual is ', np.linalg.norm(residual_callback(lambda_sol)))
 
-        lambda_sol = self._project(lambda_sol) + lambda_init
+
+            rk -= alpha_k * qik
+
+
+            print('Normalized PCPG residual is ', np.linalg.norm(rk))
+        # lambda_sol = self._project(lambda_sol) + lambda_init
+        a=4
+
+
+        plt.figure()
+        plt.plot(range(k),OrthogonalProduct[range(k)])
+        plt.xlabel('Iteration count')
+        plt.ylabel('Norm of the orthogonal SD check')
+        plt.yscale('linear')
+        # plt.ylim(1e-6, 1)
+        plt.title('The orthogonality in CG for projected search directions')
+        plt.show()
+
+        plt.figure()
+        plt.plot(range(k),AuxilaryVariable1[range(k)], label="Norm of y'*Fy")
+        plt.plot(range(k), AuxilaryVariable2[range(k)],  label="minimization parameter - alpha")
+        plt.xlabel('Iteration count')
+        plt.ylabel('Norm of the measured quantities')
+        plt.yscale('log')
+        plt.ylim(1e-15, 1e15)
+
+        plt.legend('Norm of yT,Fy', 'minimization parameter - alpha')
+        plt.title('CG convergence issues')
+        plt.show()
+
+
+        plt.figure()
+        plt.plot(range(k+1),residual_hist , label = 'Convergence of the CG')
+        plt.yscale('log')
+        plt.ylim(1e-9, 1e4)
+        plt.show()
+        # plt.legend()
+        plt.title('CG convergence issues')
+
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
             logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
+
+
 
         elapsed_time = time.time() - global_start_time
         logger.info('#' * 60)
@@ -355,7 +260,7 @@ class PCPGsolver(GlobalSolverBase):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['PCPG_iterations'] = k + 1
+        info_dict['Iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
@@ -529,7 +434,7 @@ class GMRESsolver(PCPGsolver):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_GMRES'] = elapsed_time
-        info_dict['GMRES_iterations'] = k + 1
+        info_dict['Iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
@@ -625,6 +530,7 @@ class M_ORTHOMIN(PCPGsolver):
 
         print('starting loop')
 
+        NumberOfVectors = Q_dict[0].shape[1]
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
             Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
@@ -657,6 +563,7 @@ class M_ORTHOMIN(PCPGsolver):
             Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(Q_dict[k+1], W_dict[k+1])
             Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized, SearchDirectionsorthoginalized)
             Q_dict[k + 1], W_dict[k + 1] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
+            NumberOfVectors = NumberOfVectors + Q_dict[k+1].shape[1]
             print('The number of vectors stored is                                      :', Qupdated.shape[1])
             print('the rank of the matrix of projected search direction after filtering :', np.linalg.matrix_rank(Qupdated))
             if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
@@ -696,7 +603,7 @@ class M_ORTHOMIN(PCPGsolver):
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['Iterations'] = k + 1
+        info_dict['Iterations'] = NumberOfVectors
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
@@ -741,10 +648,9 @@ class ORTHOMINsolver(PCPGsolver):
 
 
     """
-    Orthomin method as another option for a linear iterative solver, that is also able to solve
-    non-symmetric problems, minimizes the true residual in the iterative step. Expensive than GMRES
-    in terms of memory
-
+    Orthomin iterative scheme solves generalized linear systems (complex, non-symmetric, badly conditioned) similar to GMRES.
+    Unlike, GMRES, it solves the minimization problem at each step and thus the residual is available at each step. On the other hand,
+    one has to store additional varaibles compared to GMRES between iterations.
     Attributes
     ----------
     _config_dict : dict
@@ -767,7 +673,6 @@ class ORTHOMINsolver(PCPGsolver):
     def solve(self, F_callback, residual_callback, lambda_init):
         """
         Solve-method of the Orthomin-method
-
         Parameters
         ----------
         F_callback : callable
@@ -776,7 +681,6 @@ class ORTHOMINsolver(PCPGsolver):
             method, that calculates and return the system's residual from the solution-vector
         lambda_init : ndarray
             initial guess for the solution
-
         Returns
         -------
         lambda_sol : ndarray
@@ -791,8 +695,8 @@ class ORTHOMINsolver(PCPGsolver):
         if self._config_dict['max_iter'] is None:
             self._config_dict['max_iter'] = int(1 * interface_size)
 
-        logger.info('Setting GMRES tolerance = %4.2e' % self._config_dict['tolerance'])
-        logger.info('Setting GMRES max number of iterations = %i' % self._config_dict['max_iter'])
+        logger.info('Setting ORTHOMIN tolerance = %4.2e' % self._config_dict['tolerance'])
+        logger.info('Setting ORTHOMIN max number of iterations = %i' % self._config_dict['max_iter'])
 
         # initialize variables
         info_dict = {}
@@ -801,17 +705,13 @@ class ORTHOMINsolver(PCPGsolver):
         lambda_hist = np.array([])
 
         V = dict()
-        Proj_V = dict()
+        Q = dict()
 
 
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
-        residual_0 = copy(rk)
-        """ copy with numpy unlinks the two arrays 
-        """
-        lambda_0 = copy(lambda_init)
+
         k = 0
-        norm_vk = np.linalg.norm(rk)
 
         wk = self._project(rk)
         zk = self._precondition(wk)
@@ -820,20 +720,17 @@ class ORTHOMINsolver(PCPGsolver):
 
         V[0] = yk
 
-        # vk_stack = V[0][np.newaxis].T
-        # V_stack = csr_matrix(vk_stack)
 
-        proj_v= F_callback(yk)
-        norm_proj_vk= np.linalg.norm(proj_v)
-        Proj_V[0] = proj_v
-        projected_subspace = []
+        q0= F_callback(yk)
+        norm_q0= np.linalg.norm(q0)
+        Q[0] = q0
 
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            alpha = np.vdot(rk, Proj_V[k]) / np.vdot(Proj_V[k],Proj_V[k])
+            alpha = np.vdot(rk, Q[k]) / np.vdot(Q[k],Q[k])
             lambda_sol = lambda_sol + V[k] * alpha
 
-            rk =rk - alpha * Proj_V[k]
+            rk =rk - alpha * Q[k]
 
             wk = self._project(rk)
             zk = self._precondition(wk)
@@ -842,7 +739,7 @@ class ORTHOMINsolver(PCPGsolver):
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
                 residual_hist = np.append(residual_hist, np.linalg.norm(rk))
-                projected_subspace = np.append(projected_subspace, Proj_V[k])
+                eta_subspace = np.append(eta_subspace, Proj_V[k])
 
                 norm_wk = np.linalg.norm(rk)
                 if norm_wk <= self._config_dict['tolerance']:
@@ -860,13 +757,13 @@ class ORTHOMINsolver(PCPGsolver):
 
 
             for i in range(k+1):
-                beta  = np.vdot(eta, Proj_V[i])/ np.vdot(Proj_V[i],Proj_V[i])
+                beta  = np.vdot(eta, Q[i])/ np.vdot(Q[i],Q[i])
                 v_k = v_k -  beta*V[i]
-                eta = eta -  beta*Proj_V[i]
+                eta = eta -  beta*Q[i]
 
 
-            V[k+1] = v_k  #/np.linalg.norm(v_k)
-            Proj_V[k+1] = eta #/ np.linalg.norm(eta)
+            V[k+1] = v_k
+            Q[k+1] = eta
 
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
@@ -877,7 +774,7 @@ class ORTHOMINsolver(PCPGsolver):
         elapsed_time = time.time() - global_start_time
         logger.info('#' * 60)
         logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))
-        logger.info('Number of GMRES Iterations = %i !' % (k + 1))
+        logger.info('Number of ORTHOMIN  Iterations = %i !' % (k + 1))
         avg_iteration_time = elapsed_time / (k + 1)
         logger.info('{"avg_iteration_time_GMRES" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
         logger.info('#' * 60)
@@ -888,8 +785,11 @@ class ORTHOMINsolver(PCPGsolver):
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
-        info_dict['Projected_search_direction'] = Proj_V
+        info_dict['Projected_search_direction'] = Q
 
         return lambda_sol, info_dict
+
+
+
 
 

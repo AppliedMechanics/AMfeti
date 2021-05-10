@@ -74,7 +74,8 @@ class SerialSolverManager(SolverManagerBase):
         self._global_dof_dimension = 0
         self.solver = solver
         self._config_dict = {'coarse_grid': NaturalCoarseGrid(),
-                             'solution': StandardSolution()}
+                             'solution': StandardSolution(),
+                             'inspect_interface_operator': False }
         self._lambda_sol = None
         self._alpha_sol = None
         self._info_dict = dict()
@@ -87,6 +88,39 @@ class SerialSolverManager(SolverManagerBase):
     @property
     def no_lagrange_multiplier(self):
         return self._global_dof_dimension
+
+    @property
+    def interface_dimensions(self):
+        int_dim = dict()
+        for interface, dof_map in self._interface2dof_map.items():
+            int_dim[interface] = dof_map.size
+        return int_dim
+
+    @property
+    def preconditioner_operator(self):
+        prec_global = csr_matrix((self.no_lagrange_multiplier, self.no_lagrange_multiplier))
+        for problem_id, local_problem in self._local_problems_dict.items():
+            prec_local_dict = local_problem.preconditioner_operator
+            for interface_left, prec_dict_left in prec_local_dict.items():
+                for interface_right, prec_obj in prec_dict_left.items():
+                    prec_global[np.ix_(self._interface2dof_map[interface_left],
+                                       self._interface2dof_map[interface_right])] += prec_obj
+        return prec_global
+
+    @property
+    def interface_operator(self):
+        """
+        Fully assembled global interface-operator
+        """
+        F_global = csr_matrix((self.no_lagrange_multiplier, self.no_lagrange_multiplier))
+        for problem_id, local_problem in self._local_problems_dict.items():
+            F_local_dict = local_problem.interface_operator
+            for interface_left, F_dict_left in F_local_dict.items():
+                for interface_right, F_obj in F_dict_left.items():
+                    F_global[np.ix_(self._interface2dof_map[interface_left],
+                                    self._interface2dof_map[interface_right])] += F_obj
+
+        return -F_global
 
     def update(self):
         """
@@ -137,13 +171,27 @@ class SerialSolverManager(SolverManagerBase):
         None
         """
         config_dict = {'projection': self._coarse_grid.project,
-                   # 'precondition': self._apply_preconditioner}
-                    'precondition': self._apply_multi_preconditioner}
+                     'precondition': self._apply_preconditioner}
+                     # 'precondition': self._apply_multi_preconditioner}
                        #  'multiprecondition': self._apply_multi_preconditioner }
         lambda_rigid = self.initialize_lambda()
-
         self.solver.set_config(config_dict)
-        lambda_sol, info_dict = self.solver.solve(self._F_action, self._F_action_single_precon, self._residual, lambda_rigid)
+
+        print(self._config_dict['inspect_interface_operator'])
+        if self._config_dict['inspect_interface_operator']:
+            F = self.interface_operator.todense()
+            H = self.preconditioner_operator.todense()
+            ztol = 1.0e2 * np.finfo(F.dtype).eps
+            glo_mat = H @ F
+            F_eigvals, F_eigvecs = np.linalg.eig(glo_mat)
+            info_dict = {'F_eigenvalues': F_eigvals,
+                         'F_rank': np.linalg.matrix_rank(glo_mat, tol=ztol),
+                         'F_dim': F.shape}
+        else:
+            info_dict = dict()
+        lambda_sol, info_dict = self.solver.solve(self._F_action, self._residual, lambda_rigid)
+        # lambda_sol, info_dict = self.solver.solve(self._F_action, self._F_action_single_precon, self._residual,
+        #                                           lambda_rigid)
         alpha_sol = self._coarse_grid.solve(self._F_action(lambda_sol, True))
         alpha_dict = self._coarse_grid.map_vector2localproblem(alpha_sol)
 

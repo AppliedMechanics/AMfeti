@@ -595,7 +595,9 @@ class M_ORTHOMIN(PCPGsolver):
                              'energy_norm': False,
                              'save_history': True,
                              'full_reorthogonalization': True,
-                             'Recycling': True}
+                             'Recycling': True,
+                             'relax_tolerance': 0.001,
+        }
 
     def solve(self, F_callback, F_callback_single_precond, residual_callback, lambda_init,SD):
         """
@@ -643,47 +645,29 @@ class M_ORTHOMIN(PCPGsolver):
 
 
         if self._config_dict['Recycling'] is True:
-            NDArraySearchVectors = SD
+            ProjectedSearchDirections, SearchDirections  = self.RecycleVectors(SD,rk,F_callback, F_callback_single_precond)
 
+            self._Basis_Check(ProjectedSearchDirections, SearchDirections, F_callback_single_precond)
+        NewSearchDirections = self._multiprecondition(rk)
+        NewProjectedSearchDirections = self.F_callback_loop(NewSearchDirections, F_callback_single_precond)
 
-            if NDArraySearchVectors.size == 0 :
-                print('First sweep no recycling')
-                SearchDirectionsUpdated= rk
-                Qupdated = F_callback(SearchDirectionsUpdated)
+        NewProjectedSearchDirections, NewSearchDirections = self.OrthogonalizeVectors(NewProjectedSearchDirections,
+                                                                                    NewSearchDirections)
+        NewProjectedSearchDirections, NewSearchDirections = self.DeleteZeroSearchdirection(NewProjectedSearchDirections,
+                                                                           NewSearchDirections)
 
-            else:
-                NDArraySearchVectors = SD
-                NDArrayProjVectors = self.F_callback_loop(NDArraySearchVectors, F_callback_single_precond)
-                NDArrayProjVectors, NDArraySearchVectors = self.OrthogonalizeVectors(NDArrayProjVectors,
-                                                                                     NDArraySearchVectors)
-                NDArrayProjVectors, NDArraySearchVectors = self.OrthonormalStep(NDArrayProjVectors, NDArraySearchVectors)
+        self._Basis_Check(NewProjectedSearchDirections, NewSearchDirections, F_callback_single_precond)
+        if self._config_dict['Recycling'] is True:
 
+            "Append the new search directions to the recycled ones to get an othonormal basis"
+            NewProjectedSearchDirections, NewSearchDirections =self.RecyclingOrthogonalization(ProjectedSearchDirections, SearchDirections, NewProjectedSearchDirections,
+                                       NewSearchDirections, F_callback_single_precond)
 
+        self._Basis_Check(NewProjectedSearchDirections, NewSearchDirections, F_callback_single_precond)
+        Q_dict[0], W_dict[0] = self.OrthonormalStep(NewProjectedSearchDirections, NewSearchDirections)
 
-                rk, lambda_sol = self.ComputeInitialResidual(NDArrayProjVectors, NDArraySearchVectors,lambda_sol, rk,F_callback)
+        self._Basis_Check(Q_dict[0], W_dict[0], F_callback_single_precond)
 
-                print('The residual of ORTHOMIN after recycling is :',np.linalg.norm(rk))
-                print('The actual residual of the system is ', np.linalg.norm(residual_callback(lambda_sol)))
-
-                zk = self._multiprecondition(rk)
-
-                SearchDirections = zk
-                ProjectedSearchDirections=self.F_callback_loop(SearchDirections, F_callback_single_precond)
-                Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(ProjectedSearchDirections,
-                                                                           SearchDirections)
-                Qupdated,SearchDirectionsUpdated = self.RecyclingOrthogonalization(NDArrayProjVectors,NDArraySearchVectors,Qupdated,SearchDirectionsUpdated,F_callback_single_precond)
-
-        else:
-
-            zk = self._multiprecondition(rk)
-            SearchDirections = zk
-            ProjectedSearchDirections = self.F_callback_loop(SearchDirections, F_callback_single_precond)
-            Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(ProjectedSearchDirections, SearchDirections)
-            Qupdated, SearchDirectionsUpdated = self.DeleteZeroSearchdirection(Qorthoginalized,
-                                                                               SearchDirectionsorthoginalized)
-
-
-        Q_dict[0], W_dict[0] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
 
         print('starting loop')
         Counter = 0
@@ -703,9 +687,9 @@ class M_ORTHOMIN(PCPGsolver):
             wk = self._project(rk)
             zk = self._multiprecondition(wk)
 
-            RelaxTolerance = 1
 
-            if np.linalg.norm(rk) > self._config_dict['tolerance']*RelaxTolerance :
+
+            if np.linalg.norm(rk) > self._config_dict['tolerance']*self._config_dict['relax_tolerance'] :
 
                 zk = self._multiprecondition(wk)
                 SearchDirections = self._project(zk)
@@ -727,12 +711,11 @@ class M_ORTHOMIN(PCPGsolver):
                     Q_dict[k+1] = Q_dict[k+1] - np.dot(Q_dict[i],(beta_ik))
 
 
-            # if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
-            #     print("-----the basis is inconsistent after orthogonalization wrt vector blocks-----")
 
             if  Q_dict[k+1].shape[1] == 1:
 
                 print('Only single preconditioning now')
+
 
             else:
                 Qorthoginalized, SearchDirectionsorthoginalized = self.OrthogonalizeVectors(Q_dict[k+1], W_dict[k+1])
@@ -741,10 +724,14 @@ class M_ORTHOMIN(PCPGsolver):
 
                 print('The number of vectors stored is:', Qupdated.shape[1])
                 print('the rank of the matrix of projected search direction after filtering :', np.linalg.matrix_rank(Qupdated))
-                Q_dict[k + 1], W_dict[k + 1] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
-                Counter+= W_dict[k+1].shape[1]
-            # if (np.linalg.norm(Q_dict[k + 1] - self.F_callback_loop(W_dict[k + 1], F_callback_single_precond))) >= 1e-6:
-            #     print("-----the basis is inconsistent after orthogonalization wrt each other-----")
+
+                self._Basis_Check(Q_dict[k + 1], W_dict[k + 1], F_callback_single_precond)
+                Counter += W_dict[k + 1].shape[1]
+
+
+            Q_dict[k + 1], W_dict[k + 1] = self.OrthonormalStep(Qupdated, SearchDirectionsUpdated)
+
+
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
@@ -866,27 +853,43 @@ class M_ORTHOMIN(PCPGsolver):
         NDArraySearchVectors = np.delete(NDArraySearchVectors, StoreColumnId, axis=1)
         return NDArrayProjVectors, NDArraySearchVectors
 
-    def ComputeInitialResidual(self, NDArrayProjVectors, NDArraySearchVectors,lambda_init,initial_residual,F_callback):
+    # def ComputeInitialResidual(self, NDArrayProjVectors, NDArraySearchVectors,lambda_init,initial_residual,residual_callback):
+    #
+    #     Difference_ini = np.linalg.norm(initial_residual - residual_callback(lambda_init))
+    #
+    #     if Difference_ini >= 1e-6:
+    #         print('The intial residual in recycling is wrong')
+    #
+    #
+    #     InitialResidual = initial_residual
+    #     for iCounter in range(NDArrayProjVectors.shape[1]):
+    #         Minimizationstep = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), InitialResidual)
+    #         lambda_init = lambda_init + np.dot(NDArraySearchVectors[:,iCounter], Minimizationstep)
+    #         InitialResidual = InitialResidual - np.dot(NDArrayProjVectors[:,iCounter], (Minimizationstep))
 
-        Difference_ini = np.linalg.norm(initial_residual - F_callback(lambda_init))
+        #
+        # Difference =     np.linalg.norm(InitialResidual - residual_callback(lambda_init))
+        #
+        # if Difference >= 1e-6:
+        #     print('The intial residual in recycling is wrong')
+        #
+        # return  InitialResidual, lambda_init
 
-        if Difference_ini >= 1e-6:
-            print('The intial residual in recycling is wrong')
+    def RecycleVectors(self,SD,rk,F_callback, F_callback_single_precond):
 
+        if SD.size == 0:
+            print('First sweep no recycling')
+            SearchDirections = rk
+            Qupdated = F_callback(rk)
+            ProjSearchDirections, SearchDirections  = self.OrthonormalStep(Qupdated, SearchDirections)
+        else:
 
-        InitialResidual = initial_residual
-        for iCounter in range(NDArrayProjVectors.shape[1]):
-            Minimizationstep = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), InitialResidual)
-            lambda_init = lambda_init + np.dot(NDArraySearchVectors[:,iCounter], Minimizationstep)
-            InitialResidual = InitialResidual - np.dot(NDArrayProjVectors[:,iCounter], (Minimizationstep))
+            ProjSearchDirections = self.F_callback_loop(SD, F_callback_single_precond)
+            ProjSearchDirections, SearchDirections = self.OrthogonalizeVectors(ProjSearchDirections,
+                                                                                 SD)
+            ProjSearchDirections, SearchDirections = self.OrthonormalStep(ProjSearchDirections, SearchDirections)
 
-
-        Difference =     np.linalg.norm(InitialResidual - F_callback(lambda_init))
-
-        if Difference >= 1e-6:
-            print('The intial residual in recycling is wrong')
-
-        return  InitialResidual, lambda_init
+        return ProjSearchDirections, SearchDirections
 
     def RecyclingOrthogonalization(self, NDArrayProjVectors, NDArraySearchVectors, CurrentProjVectors, CurrentSearchVectors,F_callback_single_precond):
 
@@ -909,7 +912,7 @@ class M_ORTHOMIN(PCPGsolver):
         if (np.linalg.norm(NDArrayProjVectors - self.F_callback_loop(NDArraySearchVectors, F_callback_single_precond))) >= 1e-6:
             print("-----the basis is inconsistent during the orthogonalization of recycling process-----")
 
-        return  NDArraySearchVectors, NDArrayProjVectors
+        return  NDArrayProjVectors, NDArraySearchVectors,
 class ORTHOMINsolver(PCPGsolver):
 
 

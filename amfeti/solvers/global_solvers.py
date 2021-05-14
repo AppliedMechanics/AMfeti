@@ -645,26 +645,29 @@ class M_ORTHOMIN(PCPGsolver):
 
 
         if self._config_dict['Recycling'] is True:
-            ProjectedSearchDirections, SearchDirections  = self.RecycleVectors(SD,rk,F_callback, F_callback_single_precond)
 
-            self._Basis_Check(ProjectedSearchDirections, SearchDirections, F_callback_single_precond)
+            """ Computes  the updated orthonormalized SD, residual if recycling flag is on"""
+            ProjectedSearchDirections, SearchDirections, rk, lambda_sol  = self.RecycleVectors(SD,rk, lambda_sol, F_callback_single_precond,residual_callback)
+
+
+
+
         NewSearchDirections = self._multiprecondition(rk)
         NewProjectedSearchDirections = self.F_callback_loop(NewSearchDirections, F_callback_single_precond)
 
-        NewProjectedSearchDirections, NewSearchDirections = self.OrthogonalizeVectors(NewProjectedSearchDirections,
-                                                                                    NewSearchDirections)
-        NewProjectedSearchDirections, NewSearchDirections = self.DeleteZeroSearchdirection(NewProjectedSearchDirections,
-                                                                           NewSearchDirections)
 
-        self._Basis_Check(NewProjectedSearchDirections, NewSearchDirections, F_callback_single_precond)
-        if self._config_dict['Recycling'] is True:
+        if self._config_dict['Recycling'] is True and SD.size != 0:
+            "Append the new search directions to the recycled ones, update the solution and "
+            Q_dict[0], W_dict[0],rk, lambda_sol =self.BlockGramSchmidt(ProjectedSearchDirections, SearchDirections, NewProjectedSearchDirections,
+                                       NewSearchDirections, rk, lambda_sol, F_callback_single_precond)
 
-            "Append the new search directions to the recycled ones to get an othonormal basis"
-            NewProjectedSearchDirections, NewSearchDirections =self.RecyclingOrthogonalization(ProjectedSearchDirections, SearchDirections, NewProjectedSearchDirections,
-                                       NewSearchDirections, F_callback_single_precond)
+        else:
+            "Compute an orthonormal basis"
+            NewProjectedSearchDirections, NewSearchDirections = self.OrthogonalizeVectors(NewProjectedSearchDirections,NewSearchDirections)
 
-        self._Basis_Check(NewProjectedSearchDirections, NewSearchDirections, F_callback_single_precond)
-        Q_dict[0], W_dict[0] = self.OrthonormalStep(NewProjectedSearchDirections, NewSearchDirections)
+            NewProjectedSearchDirections, NewSearchDirections = self.DeleteZeroSearchdirection(NewProjectedSearchDirections, NewSearchDirections)
+
+            Q_dict[0], W_dict[0] = self.OrthonormalStep(NewProjectedSearchDirections, NewSearchDirections)
 
         self._Basis_Check(Q_dict[0], W_dict[0], F_callback_single_precond)
 
@@ -673,12 +676,23 @@ class M_ORTHOMIN(PCPGsolver):
         Counter = 0
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
+
             Minimizationstep = np.dot(np.conjugate(Q_dict[k].T),rk)
             AlphaParameter =Minimizationstep
 
             FilteringParameter = np.dot(W_dict[k],AlphaParameter)
             lambda_sol = lambda_sol + FilteringParameter
             rk = rk - np.dot(Q_dict[k], (AlphaParameter))
+
+
+            # if self._config_dict['Recycling'] is True and  k==0 :
+            #
+            #     "This simply appends the current search directions with the old ones to ensure an orthonormal basis"
+            #     Q_dict[0], W_dict[0] = self.BlockGramSchmidt(ProjectedSearchDirections, SearchDirections,
+            #                                                                               NewProjectedSearchDirections,NewSearchDirections,
+            #                                                                               F_callback_single_precond)
+            #
+
             ActualResidual = np.linalg.norm(residual_callback(lambda_sol))
 
             print('Residue        = ', np.linalg.norm(rk))
@@ -853,66 +867,88 @@ class M_ORTHOMIN(PCPGsolver):
         NDArraySearchVectors = np.delete(NDArraySearchVectors, StoreColumnId, axis=1)
         return NDArrayProjVectors, NDArraySearchVectors
 
-    # def ComputeInitialResidual(self, NDArrayProjVectors, NDArraySearchVectors,lambda_init,initial_residual,residual_callback):
-    #
-    #     Difference_ini = np.linalg.norm(initial_residual - residual_callback(lambda_init))
-    #
-    #     if Difference_ini >= 1e-6:
-    #         print('The intial residual in recycling is wrong')
-    #
-    #
-    #     InitialResidual = initial_residual
-    #     for iCounter in range(NDArrayProjVectors.shape[1]):
-    #         Minimizationstep = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), InitialResidual)
-    #         lambda_init = lambda_init + np.dot(NDArraySearchVectors[:,iCounter], Minimizationstep)
-    #         InitialResidual = InitialResidual - np.dot(NDArrayProjVectors[:,iCounter], (Minimizationstep))
+    def ComputeInitialResidual(self, NDArrayProjVectors, NDArraySearchVectors,lambda_init,initial_residual,residual_callback):
 
-        #
-        # Difference =     np.linalg.norm(InitialResidual - residual_callback(lambda_init))
-        #
-        # if Difference >= 1e-6:
-        #     print('The intial residual in recycling is wrong')
-        #
-        # return  InitialResidual, lambda_init
+        Difference_ini = np.linalg.norm(initial_residual - residual_callback(lambda_init))
 
-    def RecycleVectors(self,SD,rk,F_callback, F_callback_single_precond):
+        if Difference_ini >= 1e-6:
+            print('The intial residual in recycling is wrong')
+
+
+        InitialResidual = initial_residual
+        for iCounter in range(NDArrayProjVectors.shape[1]):
+            Minimizationstep = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), InitialResidual)
+            lambda_init = lambda_init + np.dot(NDArraySearchVectors[:,iCounter], Minimizationstep)
+            InitialResidual = InitialResidual - np.dot(NDArrayProjVectors[:,iCounter], (Minimizationstep))
+
+
+        Difference =     np.linalg.norm(InitialResidual - residual_callback(lambda_init))
+
+        if Difference >= 1e-6:
+            print('The intial residual in recycling is wrong')
+
+        return  InitialResidual, lambda_init
+
+    def RecycleVectors(self,SD,rk,lambda_sol, F_callback_single_precond, residual_callback):
 
         if SD.size == 0:
             print('First sweep no recycling')
-            SearchDirections = rk
-            Qupdated = F_callback(rk)
-            ProjSearchDirections, SearchDirections  = self.OrthonormalStep(Qupdated, SearchDirections)
+            # SearchDirections = rk
+            # Qupdated = F_callback(rk)
+            # ProjSearchDirections, SearchDirections  = self.OrthonormalStep(Qupdated, SearchDirections)
+            ProjSearchDirections=[]
+            SearchDirections = []
+
         else:
 
+            """     Project the SD on the new interface operator"""
             ProjSearchDirections = self.F_callback_loop(SD, F_callback_single_precond)
+
+            """ Orthonormalize them using L-D-L*"""
             ProjSearchDirections, SearchDirections = self.OrthogonalizeVectors(ProjSearchDirections,
                                                                                  SD)
-            ProjSearchDirections, SearchDirections = self.OrthonormalStep(ProjSearchDirections, SearchDirections)
+            """ Remove linearly dependent search directions"""
+            ProjSearchDirections, SearchDirections = self.DeleteZeroSearchdirection(ProjSearchDirections, SearchDirections)
 
-        return ProjSearchDirections, SearchDirections
+            """ Orthonormalize the basis"""
+            ProjSearchDirections, SearchDirections = self.OrthonormalStep(ProjSearchDirections,
+                                                                               SearchDirections)
 
-    def RecyclingOrthogonalization(self, NDArrayProjVectors, NDArraySearchVectors, CurrentProjVectors, CurrentSearchVectors,F_callback_single_precond):
+            """ Compute the recycled residual and updated solution from these search directions"""
+            rk, lambda_sol = self.ComputeInitialResidual(ProjSearchDirections, SearchDirections, lambda_sol, rk,
+                                                    residual_callback)
 
-        for iVector in range(CurrentProjVectors.shape[1]):
+        return ProjSearchDirections, SearchDirections, rk, lambda_sol
 
-            for iCounter in range(NDArrayProjVectors.shape[1]):
-                iParameter = np.dot(np.conjugate(NDArrayProjVectors[:,iCounter].T), CurrentProjVectors[:,iVector])
+    def BlockGramSchmidt(self, NDArrayProjVectors, NDArraySearchVectors, CurrentProjVectors, CurrentSearchVectors,rk, lambda_sol, F_callback_single_precond):
 
-                CurrentSearchVectors[:,iVector] = CurrentSearchVectors[:,iVector] -NDArraySearchVectors[:,iCounter]*iParameter
-                CurrentProjVectors[:,iVector]   = CurrentProjVectors[:,iVector] -  NDArrayProjVectors[:,iCounter]*iParameter
+        Numerator = np.dot(np.conjugate(NDArrayProjVectors.T), CurrentProjVectors)
 
-            OrthonormalParamter = np.linalg.norm(CurrentProjVectors[:,iVector])
-            CurrentProjVectors[:, iVector] = CurrentProjVectors[:,iVector]/OrthonormalParamter
-            CurrentSearchVectors[:, iVector] = CurrentSearchVectors[:, iVector]/OrthonormalParamter
-            vk_stack = CurrentSearchVectors[:,iVector][np.newaxis].T
-            NDArraySearchVectors = np.append(NDArraySearchVectors,vk_stack,axis=1)
-            vk_stack = CurrentProjVectors[:, iVector][np.newaxis].T
-            NDArrayProjVectors = np.append(NDArrayProjVectors,vk_stack,axis=1)
+        CurrentSearchVectors =CurrentSearchVectors - np.dot(NDArraySearchVectors, Numerator)
+        CurrentProjVectors = CurrentProjVectors - np.dot(NDArrayProjVectors, Numerator)
+
+        ProjectedSearchDirections, SearchDirections = self.OrthogonalizeVectors(CurrentProjVectors,CurrentSearchVectors)
+        ProjectedSearchDirections, SearchDirections = self.DeleteZeroSearchdirection(ProjectedSearchDirections, SearchDirections)
+
+        ProjectedSearchDirections, SearchDirections = self.OrthonormalStep(ProjectedSearchDirections,
+                                                                                     SearchDirections)
+
+        Minimizationstep = np.dot(np.conjugate(ProjectedSearchDirections.T), rk)
+
+        FilteringParameter = np.dot(SearchDirections, Minimizationstep)
+        lambda_sol = lambda_sol + FilteringParameter
+        rk = rk - np.dot(ProjectedSearchDirections, Minimizationstep)
+
+
+        # vk_stack = SearchDirections[np.newaxis].T
+        # SearchDirections = np.append(SearchDirections,vk_stack,axis=1)
+        # vk_stack = ProjectedSearchDirections[np.newaxis].T
+        # ProjectedSearchDirections = np.append(ProjectedSearchDirections,vk_stack,axis=1)
 
         if (np.linalg.norm(NDArrayProjVectors - self.F_callback_loop(NDArraySearchVectors, F_callback_single_precond))) >= 1e-6:
             print("-----the basis is inconsistent during the orthogonalization of recycling process-----")
 
-        return  NDArrayProjVectors, NDArraySearchVectors,
+        return  ProjectedSearchDirections, SearchDirections, rk, lambda_sol
 class ORTHOMINsolver(PCPGsolver):
 
 

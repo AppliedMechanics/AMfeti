@@ -121,7 +121,7 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
 
 
 
-    def solve(self,SD):
+    def solve(self):
 
         """
         Runs the solver-manager's solve-method.
@@ -156,7 +156,7 @@ class LinearDynamicFetiSolverFRF(FetiSolverBase):
             self._update_local_problems()
             self._solver_manager.update()
             # self._solver_manager.solve()
-            self._solver_manager.solve(SD)
+            self._solver_manager.solve()
             solution_dict[0] = deepcopy(self._solver_manager.solution)
             print("Frequency = %d : GMRES iteration %d"
                   % (w_list, solution_dict[0].solver_information['Iterations']))

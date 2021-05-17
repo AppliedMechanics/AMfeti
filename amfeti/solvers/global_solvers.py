@@ -17,6 +17,7 @@ from scipy import linalg as spp
 from copy import copy
 from scipy.sparse import csr_matrix, hstack, vstack
 from scipy.sparse.linalg import spsolve
+from matplotlib import pyplot as plt
 
 __all__ = ['PCPGsolver',
            'GMRESsolver',
@@ -33,181 +34,6 @@ class GlobalSolverBase(ConfigBase):
 
 
 
-#
-# class M_PCPGsolver(GlobalSolverBase):
-#     """
-#     Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
-#     problem. This solver is an extension of the well-known iterative Conjugate Gradient methods by a preconditioner and
-#     a nullspace-projection for singular problems. Moreover, this solver supports full reorthogonalization, which is able
-#     to improve convergence, if F-orthogonality degrades during the iterations.
-#
-#     References
-#     ----------
-#     [1]  D.J. Rixen and C. Farhat (1999): A simple and efficient extension of a class of substructure based
-#          preconditioners to heterogeneous structural mechanics problems. International Journal for Numerical Methods in
-#          Engineering 44 489--516.
-#     [2]  C. Farhat and F.X. Roux (1994): Implicit parallel processing in structural mechanics. Computational Mechanics
-#          Advances 2 1--124.
-#     [3]  M.C. Leistner, P. Gosselet, D.J. Rixen (2018): Recycling of solution spaces in multipreconditioned FETI methods
-#          applied to structural dynamics. International Journal of Numerical Methods in Engineering 116 141--160
-#          doi:10.1002/nme.5918.
-#
-#     Attributes
-#     ----------
-#     _config_dict : dict
-#         configuration dictionary
-#     """
-#     def __init__(self):
-#         """
-#         Parameters
-#         ----------
-#         None
-#         """
-#         super().__init__()
-#         self._config_dict = {'tolerance': 1e-7,
-#                              'max_iter': None,
-#                              'projection': None,
-#                              'precondition': None,
-#                              'energy_norm': False,
-#                              'save_history': False,
-#                              'full_reorthogonalization': True}
-#
-#     def solve(self, F_callback, residual_callback, lambda_init):
-#         """
-#         Solve-method of the PCPG-method
-#
-#         Parameters
-#         ----------
-#         F_callback : callable
-#             method, that applies the solution-vector on the system-matrix F and returns the result
-#         residual_callback : callable
-#             method, that calculates and return the system's residual from the solution-vector
-#         lambda_init : ndarray
-#             initial guess for the solution
-#
-#         Returns
-#         -------
-#         lambda_sol : ndarray
-#             calculated solution
-#         info_dict : dict
-#             general information on the solution-process
-#         """
-#         logger = logging.getLogger(__name__)
-#
-#         interface_size = len(lambda_init)
-#
-#         if self._config_dict['max_iter'] is None:
-#             self._config_dict['max_iter'] = int(1 * interface_size)
-#
-#         logger.info('Setting PCPG tolerance = %4.2e' % self._config_dict['tolerance'])
-#         logger.info('Setting PCPG max number of iterations = %i' % self._config_dict['max_iter'])
-#
-#         # initialize variables
-#         info_dict = {}
-#         global_start_time = time.time()
-#         residual_hist = np.array([])
-#         lambda_hist = np.array([])
-#
-#         """ Initialize the storage vectors"""
-#         W_dict = {}
-#         Q_dict = {}
-#         delta_dict ={}
-#
-#
-#
-#         """ Initialize the solution and residual vectors"""
-#         lambda_sol = np.zeros_like(lambda_init)
-#         rk = residual_callback(lambda_init)
-#
-#         # SearchDirectionCounter = 0;
-#         k = 0
-#
-#         for k in range(self._config_dict['max_iter']):
-#             info_dict[k] = {}
-#             wk=rk
-#             # wk = self._project(rk)
-#             zk = self._precondition(rk)
-#             # zk = self._project(zk)
-#             # yk = zk
-#             W_dict[k] = zk
-#             Q_dict[k] = F_callback(zk)
-#
-#             gamma_i = np.dot(zk.T, rk)
-#
-#             delta= Matrix(np.dot(Q_dict[k].T, zk))
-#             q= delta.apply_inverse(gamma_i)
-#             delta_dict.update({k:delta})
-#
-#
-#
-#
-#             lambda_sol = lambda_sol + np.dot(W_dict[k],q)
-#             rk = rk - np.dot(Q_dict[k], q)
-#
-#
-#             if self._config_dict['full_reorthogonalization']:
-#                 yk1 = zk
-#                 for i in range(k):
-#                     phi_ik = np.dot( Q_dict[k].T, W_dict[k])
-#                     W_dict[k] = W_dict[k] - np.dot(W_dict[i],np.dot(delta_dict[i].data,phi_ik ))
-#
-#
-#
-#             if self._config_dict['save_history']:
-#                 lambda_hist = np.append(lambda_hist, lambda_sol)
-#                 residual_hist = np.append(residual_hist, np.linalg.norm(rk))
-#
-#             if self._config_dict['energy_norm']:
-#                 norm_wk = np.sqrt(vn1)
-#                 logging.info(
-#                     'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
-#                 if norm_wk <= self._config_dict['tolerance']:
-#                     # evaluate the exact norm
-#                     _norm_wk = np.linalg.norm(wk)
-#                     if _norm_wk <= self._config_dict['tolerance']:
-#                         logger.info('PCPG has converged after %i' % (k + 1))
-#                         logger.info('Iteration = %i, Norm of project residual wk = %2.5e!' % (k, _norm_wk))
-#                         break
-#             else:
-#                 norm_wk = np.linalg.norm(rk)
-#                 if norm_wk <= self._config_dict['tolerance']:
-#                     logger.info('PCPG has converged after %i' % (k + 1))
-#                     break
-#
-#
-#         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
-#             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
-#             logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
-#
-#         elapsed_time = time.time() - global_start_time
-#         logger.info('#' * 60)
-#         logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))
-#         logger.info('Number of PCPG Iterations = %i !' % (k + 1))
-#         avg_iteration_time = elapsed_time / (k + 1)
-#         logger.info('{"avg_iteration_time_PCPG" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
-#         logger.info('#' * 60)
-#
-#         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
-#         info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-#         info_dict['PCPG_iterations'] = k + 1
-#         info_dict['lambda_hist'] = lambda_hist
-#         info_dict['residual_hist'] = residual_hist
-#         info_dict['residual'] = norm_wk
-#         return lambda_sol, info_dict
-#
-#     def _precondition(self, v):
-#         if self._config_dict['precondition'] is not None:
-#             precondition = self._config_dict['precondition']
-#             v = precondition(v)
-#             return v
-#         else:
-#             return copy(v)
-#
-#     def _project(self, v):
-#         if self._config_dict['projection'] is not None:
-#             project = self._config_dict['projection']
-#             v = project(v)
-#         return v
 class PCPGsolver(GlobalSolverBase):
     """
     Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
@@ -242,7 +68,7 @@ class PCPGsolver(GlobalSolverBase):
                              'precondition': None,
                              'multiprecondition': None,
                              'energy_norm': False,
-                             'save_history': False,
+                             'save_history': True,
                              'full_reorthogonalization': True}
 
     def solve(self, F_callback, residual_callback, lambda_init):
@@ -285,15 +111,17 @@ class PCPGsolver(GlobalSolverBase):
         rk = residual_callback(lambda_init)
         InitialResidual = rk
         k = 0
-
+        Store =[]
+        Alpha_denominator = []
+        Alpha_numerator = []
+        Store_residual=[]
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
             wk = self._project(rk)
             zk = self._precondition(wk)
+
             yk = self._project(zk)
-            # wk=rk
-            # zk=wk
-            # yk=zk
+
 
 
             if self._config_dict['full_reorthogonalization']:
@@ -333,16 +161,32 @@ class PCPGsolver(GlobalSolverBase):
             if self._config_dict['full_reorthogonalization']:
                 Y[k] = copy(yk)
                 Q[k] = copy(Fyk)
+
+                if k > 0:
+                    Store.append(np.dot(Y[0].T, F_callback(Y[k])))
+
             else:
                 yk_1 = copy(yk)
                 qk_1 = copy(Fyk)
 
+
             aux2 = np.linalg.norm(np.vdot(yk, Fyk))
             alpha_k = (vn1 / aux2)
+
+            if k>0:
+                Alpha_denominator.append(aux2)
+                Alpha_numerator.append(vn1)
 
             lambda_sol = lambda_sol +  Y[k]*alpha_k
 
             rk = rk - alpha_k * Q[k]
+
+
+            if k==0:
+                r0 = rk - alpha_k * Q[k]
+
+            if k>0:
+                Store_residual.append( np.dot(zk.T,r0))
             ComputeError = np.linalg.norm(rk - (InitialResidual- F_callback(lambda_sol)))
 
 
@@ -364,6 +208,19 @@ class PCPGsolver(GlobalSolverBase):
             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
             logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
 
+        plt.figure()
+        # plt.plot(np.arange(k), np.abs(Store))
+        plt.plot(np.arange(k), np.abs(Store_residual))
+        # plt.plot(np.arange(k), np.abs(Alpha_numerator))
+        # plt.plot(np.arange(k), np.abs(Alpha_denominator))
+        plt.yscale('log')
+        # plt.legend(['Orthogonal_p'], ['Alpha_n'], ['Alpha_d'])
+        plt.show()
+        plt.figure()
+        plt.plot(np.arange(k), residual_hist[0:k])
+        plt.yscale('log')
+        # plt.legend(['Orthogonal_p'], ['Alpha_n'], ['Alpha_d'])
+        plt.show()
         elapsed_time = time.time() - global_start_time
         logger.info('#' * 60)
         logger.info('{"Total_elaspsed_time_PCPG" : %2.2f} # Elapsed time [s]' % (elapsed_time))

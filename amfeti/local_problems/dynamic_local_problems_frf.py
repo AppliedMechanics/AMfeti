@@ -67,7 +67,7 @@ class LinearDynamicLocalProblemFRF(LocalProblemBase):
                                                       'tolerance': 1e-10},
                              'preconditioner': DirichletPreconditioner(),
                              'scaling': MultiplicityScaling(),
-                             'preconditioner_matrix': 'stiffness',
+                             'preconditioner_matrix': 'dynamic_stiffness',
                              }
         self.set_config(kwargs)
 

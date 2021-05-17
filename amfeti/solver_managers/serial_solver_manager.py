@@ -124,8 +124,8 @@ class SerialSolverManager(SolverManagerBase):
 
         self._coarse_grid.update(BR_dict, RTf_dict, self._interfacedict2vector)
 
-    def solve(self,SD):
-    # def solve(self):
+    # def solve(self,SD):
+    def solve(self):
         """
         Solves the global linear problem
 
@@ -144,8 +144,8 @@ class SerialSolverManager(SolverManagerBase):
         lambda_rigid = self.initialize_lambda()
 
         self.solver.set_config(config_dict)
-        # lambda_sol, info_dict = self.solver.solve(self._F_action, self._residual,lambda_rigid)
-        lambda_sol, info_dict = self.solver.solve(self._F_action, self._F_action_single_precon, self._residual, lambda_rigid,SD)
+        lambda_sol, info_dict = self.solver.solve(self._F_action, self._residual,lambda_rigid)
+        # lambda_sol, info_dict = self.solver.solve(self._F_action, self._F_action_single_precon, self._residual, lambda_rigid,SD)
         alpha_sol = self._coarse_grid.solve(self._F_action(lambda_sol, True))
         alpha_dict = self._coarse_grid.map_vector2localproblem(alpha_sol)
 

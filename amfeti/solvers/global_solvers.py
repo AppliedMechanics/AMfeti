@@ -35,26 +35,6 @@ class GlobalSolverBase(ConfigBase):
 
 
 class PCPGsolver(GlobalSolverBase):
-    """
-    Preconditioned Conjugate Projected Gradient-iterative solver, that is usually used to solve the linear global
-    problem. This solver is an extension of the well-known iterative Conjugate Gradient methods by a preconditioner and
-    a nullspace-projection for singular problems. Moreover, this solver supports full reorthogonalization, which is able
-    to improve convergence, if F-orthogonality degrades during the iterations.
-    References
-    ----------
-    [1]  D.J. Rixen and C. Farhat (1999): A simple and efficient extension of a class of substructure based
-         preconditioners to heterogeneous structural mechanics problems. International Journal for Numerical Methods in
-         Engineering 44 489--516.
-    [2]  C. Farhat and F.X. Roux (1994): Implicit parallel processing in structural mechanics. Computational Mechanics
-         Advances 2 1--124.
-    [3]  M.C. Leistner, P. Gosselet, D.J. Rixen (2018): Recycling of solution spaces in multipreconditioned FETI methods
-         applied to structural dynamics. International Journal of Numerical Methods in Engineering 116 141--160
-         doi:10.1002/nme.5918.
-    Attributes
-    ----------
-    _config_dict : dict
-        configuration dictionary
-    """
     def __init__(self):
         """
         Parameters
@@ -72,23 +52,7 @@ class PCPGsolver(GlobalSolverBase):
                              'full_reorthogonalization': True}
 
     def solve(self, F_callback, residual_callback, lambda_init):
-        """
-        Solve-method of the PCPG-method
-        Parameters
-        ----------
-        F_callback : callable
-            method, that applies the solution-vector on the system-matrix F and returns the result
-        residual_callback : callable
-            method, that calculates and return the system's residual from the solution-vector
-        lambda_init : ndarray
-            initial guess for the solution
-        Returns
-        -------
-        lambda_sol : ndarray
-            calculated solution
-        info_dict : dict
-            general information on the solution-process
-        """
+
         logger = logging.getLogger(__name__)
 
         interface_size = len(lambda_init)
@@ -105,7 +69,7 @@ class PCPGsolver(GlobalSolverBase):
         residual_hist = np.array([])
         lambda_hist = np.array([])
         if self._config_dict['full_reorthogonalization']:
-            Y = dict()
+            P = dict()
             Q = dict()
         lambda_sol = np.zeros_like(lambda_init)
         rk = residual_callback(lambda_init)
@@ -117,105 +81,61 @@ class PCPGsolver(GlobalSolverBase):
         Store_residual=[]
         for k in range(self._config_dict['max_iter']):
             info_dict[k] = {}
-            wk = self._project(rk)
-            zk = self._precondition(wk)
 
-            yk = self._project(zk)
+            pk = self._precondition(rk)
+
+            for i in range(k):
+                Orthoparameter = np.dot(np.conjugate(Q[i]).T, pk) / np.dot(np.conjugate(P[i]).T, Q[i])
+                pk = pk - Orthoparameter * P[i]
+
+            P[k] = pk
+            Q[k] = F_callback(pk)
+
+            alpha_numerator = np.dot(np.conjugate(P[k]).T, rk)
+            alpha_denominator = np.dot(np.conjugate(P[k]).T, Q[k])
+
+            alpha_k = (alpha_numerator / alpha_denominator)
+
+            lambda_init = lambda_init + P[k] * alpha_k
+            rk = rk - alpha_k * Q[k]
 
 
-
-            if self._config_dict['full_reorthogonalization']:
-                yk1 = yk
-                for i in range(k):
-                    yki = Y[i]
-                    qki = Q[i]
-                    Orthoparameter= np.vdot(qki, yk1) / np.vdot(qki, yki)
-                    yk -=  Orthoparameter* yki
-            elif k > 0:
-                yk -= np.vdot(qk_1, yk) / np.vdot(qk_1, yk_1) * yk_1
-
-            vn1 = np.vdot(wk, zk)
 
             if self._config_dict['save_history']:
                 lambda_hist = np.append(lambda_hist, lambda_sol)
                 residual_hist = np.append(residual_hist, np.linalg.norm(rk))
 
-            if self._config_dict['energy_norm']:
-                norm_wk = np.sqrt(vn1)
-                logging.info(
-                    'Iteration = %i, Norm of project preconditioned residual  sqrt(<yk,wk>) = %2.5e!' % (k, norm_wk))
-                if norm_wk <= self._config_dict['tolerance']:
-                    # evaluate the exact norm
-                    _norm_wk = np.linalg.norm(wk)
-                    if _norm_wk <= self._config_dict['tolerance']:
-                        logger.info('PCPG has converged after %i' % (k + 1))
-                        logger.info('Iteration = %i, Norm of project residual wk = %2.5e!' % (k, _norm_wk))
-                        break
-            else:
-                norm_wk = np.linalg.norm(wk)
-                if norm_wk <= self._config_dict['tolerance']:
-                    logger.info('PCPG has converged after %i' % (k + 1))
-                    break
 
-            Fyk = F_callback(yk)
-            if self._config_dict['full_reorthogonalization']:
-                Y[k] = copy(yk)
-                Q[k] = copy(Fyk)
-
-                if k > 0:
-                    Store.append(np.dot(Y[0].T, F_callback(Y[k])))
-
-            else:
-                yk_1 = copy(yk)
-                qk_1 = copy(Fyk)
+            norm_wk = np.linalg.norm( np.dot(pk.T,rk))
+            if norm_wk <= self._config_dict['tolerance']:
+                logger.info('PCPG has converged after %i' % (k + 1))
+                break
 
 
-            aux2 = np.linalg.norm(np.vdot(yk, Fyk))
-            alpha_k = (vn1 / aux2)
 
-            if k>0:
-                Alpha_denominator.append(aux2)
-                Alpha_numerator.append(vn1)
-
-            lambda_sol = lambda_sol +  Y[k]*alpha_k
-
-            rk = rk - alpha_k * Q[k]
+            # if k>0:
+            #     Store_residual.append( np.dot(zk.T,r0))
+            # ComputeError = np.linalg.norm(rk - (InitialResidual- F_callback(lambda_sol)))
 
 
-            if k==0:
-                r0 = rk - alpha_k * Q[k]
-
-            if k>0:
-                Store_residual.append( np.dot(zk.T,r0))
-            ComputeError = np.linalg.norm(rk - (InitialResidual- F_callback(lambda_sol)))
+            # print('The difference between the residuals is ',ComputeError)
 
 
-            print('The difference between the residuals is ',ComputeError)
 
-            BasisError = np.linalg.norm(Fyk- F_callback(yk))
-
-            if BasisError >1e-6:
-                print('The basis  is inconsistent ', BasisError)
-
-            print('The CG residual is ',np.linalg.norm(rk))
-
-            solution = residual_callback(lambda_sol)
-            print('The actual residual is ',np.linalg.norm(solution))
-
-        lambda_sol = self._project(lambda_sol) + lambda_init
+        lambda_sol =lambda_init
 
         if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
             logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
             logger.warning('Projected norm = %2.5e , where the PCPG tolerance is set to %2.5e' % (norm_wk, self._config_dict['tolerance']))
 
-        plt.figure()
-        # plt.plot(np.arange(k), np.abs(Store))
-        plt.plot(np.arange(k), np.abs(Store_residual))
-        # plt.plot(np.arange(k), np.abs(Alpha_numerator))
-        # plt.plot(np.arange(k), np.abs(Alpha_denominator))
-        plt.yscale('log')
-        # plt.legend(['Orthogonal_p'], ['Alpha_n'], ['Alpha_d'])
-        plt.show()
+        # plt.figure()
+        # # plt.plot(np.arange(k), np.abs(Store))
+        # plt.plot(np.arange(k), np.abs(Store_residual))
+        # # plt.plot(np.arange(k), np.abs(Alpha_numerator))
+        # # plt.plot(np.arange(k), np.abs(Alpha_denominator))
+        # plt.yscale('log')
+        # # plt.legend(['Orthogonal_p'], ['Alpha_n'], ['Alpha_d'])
+        # plt.show()
         plt.figure()
         plt.plot(np.arange(k), residual_hist[0:k])
         plt.yscale('log')

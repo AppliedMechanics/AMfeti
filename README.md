@@ -8,13 +8,6 @@ AMfeti - FETI Research Code at the Chair of Applied Mechanics
 # AMfeti
 AMfeti is a Python Library to solve and implement parallel FETI-Like solvers using mpi4py.
 
-Coverage Report:
-[![coverage report](https://gitlab.lrz.de/AM/amfeti/badges/master/coverage.svg)](https://gitlab.lrz.de/AM/amfeti/commits/master)
-
-Pipeline Status:
-[![pipeline status](https://gitlab.lrz.de/AM/amfeti/badges/master/pipeline.svg)](https://gitlab.lrz.de/AM/amfeti/commits/master)
-
-
 Overview:
 ---------
 
@@ -46,7 +39,7 @@ requirements (such as python 2.7 instead 3.7).
 
 For getting the package type
     ```{r, engine='bash', count_lines}
-    git clone https://gitlab.lrz.de/AM/AMfeti.git
+    git clone https://github.com/AppliedMechanics/AMfeti.git
     ```
 in your console. Git will clone the repository into the current folder.
 For installing the package in development mode run

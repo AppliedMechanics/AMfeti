@@ -18,7 +18,7 @@ class DummyPreconditioner:
         self.Q=None
 
     def update(self, K, interface_dofs):
-        self.Q = K.data[np.ix_(interface_dofs, interface_dofs)]
+        self.Q = K.matrix[np.ix_(interface_dofs, interface_dofs)]
 
 
 class LocalProblemBaseTest(TestCase):
@@ -72,7 +72,7 @@ class LinearStaticLocalProblemTest(TestCase):
         self.assertEqual(test_problem.id, 1)
         self.assertEqual(test_problem.dimension, 4)
         self.assertTrue(isinstance(test_problem.K, Matrix))
-        assert_array_equal(test_problem.K.data.todense(), self.K.todense())
+        assert_array_equal(test_problem.K.matrix.todense(), self.K.todense())
         self.custom_asserter.assert_dict_equal(test_problem.B, self.B)
         assert_array_equal(test_problem.f, self.f)
 
@@ -151,9 +151,9 @@ class LinearStaticLocalProblemTest(TestCase):
         q_b_actual = self.local_problem.solve({'interface1': np.array([-0.1, 0.3]),
                                                'interface2': np.array([0.2]),
                                                'interface3': np.array([-0.2, 0.6])}, True, np.array([0.1]))
-        q_b_desired = {'interface1': np.array([0.7 , 0.55]),
+        q_b_desired = {'interface1': np.array([0.7, 0.55]),
                        'interface2': np.array([-0.7]),
-                       'interface3': np.array([0.7 , 0.35])}
+                       'interface3': np.array([0.7, 0.35])}
         self.custom_asserter.assert_dict_almost_equal(q_b_actual, q_b_desired)
 
     def test_expand_external_solution(self):
@@ -303,7 +303,8 @@ class LinearDynamicLocalProblemTest(TestCase):
 
         self.local_problem.update_system({'interface1': np.array([0.1, 0.42]),
                                           'interface2': np.array([0.64]),
-                                          'interface3': np.array([-0.67, 1.32])}, {'test_dict': True})
+                                          'interface3': np.array([-0.67, 1.32])}, {'test_dict': True,
+                                                                                   'solver_start': False})
 
         assert_array_almost_equal(self.local_problem._dq_p, np.array([0.7, -0.2, 0.52, 1.38]))
         assert_array_almost_equal(self.local_problem.t, np.array([0, 0.01]))
@@ -311,6 +312,11 @@ class LinearDynamicLocalProblemTest(TestCase):
         assert_array_almost_equal(self.local_problem.q[1], np.array([0.0035, -0.001, 0.0026, 0.0069]))
         assert_array_almost_equal(self.local_problem.dq[1], np.array([0.7, -0.2, 0.52, 1.38]))
         assert_array_almost_equal(self.local_problem.ddq[1], np.array([140.0, -40.0, 104.0, 276.0]))
+
+        self.local_problem.update_system({'interface1': np.array([0.1, 0.42]),
+                                          'interface2': np.array([0.64]),
+                                          'interface3': np.array([-0.67, 1.32])}, {'test_dict': True,
+                                                                                   'solver_start': True})
 
         assert_array_almost_equal(self.local_problem._integrator._q_n, np.array([0.0035, -0.001, 0.0026, 0.0069]))
         assert_array_almost_equal(self.local_problem._integrator._dq_n, np.array([0.7, -0.2, 0.52, 1.38]))

@@ -38,6 +38,15 @@ class LinearStaticExampleTest(ExampleTestBase):
 
         self.custom_asserter.assert_dict_almost_equal(q_dict_serial, self.q_dict_desired)
 
+        info_dict_keys_desired = {'avg_iteration_time': None,
+                                  'Total_elaspsed_time': None,
+                                  'iterations': None,
+                                  'lambda_hist': None,
+                                  'residual_hist': None,
+                                  'residual': None}
+
+        self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
+
     def test_parallel_solver(self):
         if self.run_parallel_tests:
             fetisolver = LinearStaticFetiSolver(deepcopy(self.K_dict), deepcopy(self.B_dict), deepcopy(self.f_dict),
@@ -61,6 +70,15 @@ class LinearStaticExampleTest(ExampleTestBase):
                 q_dict_parallel[problem_id] = problem.q
 
             self.custom_asserter.assert_dict_almost_equal(q_dict_parallel, self.q_dict_desired)
+
+            info_dict_keys_desired = {'avg_iteration_time': None,
+                                      'Total_elaspsed_time': None,
+                                      'iterations': None,
+                                      'lambda_hist': None,
+                                      'residual_hist': None,
+                                      'residual': None}
+
+            self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
         else:
             logger = logging.getLogger(__name__)
             logger.warning('Parallel test has not been run. If parallel tests shall be run, switch on the '

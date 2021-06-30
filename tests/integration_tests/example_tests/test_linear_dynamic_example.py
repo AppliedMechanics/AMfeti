@@ -132,8 +132,19 @@ class LinearDynamicExampleTest(ExampleTestBase):
 
         self.custom_asserter.assert_dict_almost_equal(q_dict_serial, self.q_dict_desired)
         self.custom_asserter.assert_dict_almost_equal(dq_dict_serial, self.dq_dict_desired)
-        self.custom_asserter.decimals = 3
+        self.custom_asserter.decimals = 2
         self.custom_asserter.assert_dict_almost_equal(ddq_dict_serial, self.ddq_dict_desired)
+
+        info_dict_keys_desired = dict()
+        for tstep in range(0, 3):
+            info_dict_keys_desired[tstep] = {'avg_iteration_time': None,
+                                               'Total_elaspsed_time': None,
+                                               'iterations': None,
+                                               'lambda_hist': None,
+                                               'residual_hist': None,
+                                               'residual': None}
+
+        self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
 
     def test_parallel_solver(self):
         if self.run_parallel_tests:
@@ -169,6 +180,17 @@ class LinearDynamicExampleTest(ExampleTestBase):
             self.custom_asserter.assert_dict_almost_equal(dq_dict_parallel, self.dq_dict_desired)
             self.custom_asserter.decimals = 3
             self.custom_asserter.assert_dict_almost_equal(ddq_dict_parallel, self.ddq_dict_desired)
+
+            info_dict_keys_desired = dict()
+            for tstep in range(0, 3):
+                info_dict_keys_desired[tstep] = {'avg_iteration_time': None,
+                                                 'Total_elaspsed_time': None,
+                                                 'iterations': None,
+                                                 'lambda_hist': None,
+                                                 'residual_hist': None,
+                                                 'residual': None}
+
+            self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
         else:
             logger = logging.getLogger(__name__)
             logger.warning('Parallel test has not been run. If parallel tests shall be run, switch on the '

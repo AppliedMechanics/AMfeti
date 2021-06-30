@@ -1,5 +1,5 @@
-# sphinx-apidoc -f -o . ../amfe --separate --private && make html
+# sphinx-apidoc -f -o . ../amfeti --separate --private && make html
 make html
 
 # building class diagram
-cd .. && pyreverse -o pdf -p AMfe amfe
+cd .. && pyreverse -o pdf -p AMfeti amfeti

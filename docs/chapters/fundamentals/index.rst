@@ -2,7 +2,10 @@
 Fundamentals
 ************
 
-.. comment::
-    .. toctree::
+.. _fundamentals:
 
-        time-integration
+.. toctree::
+    :maxdepth: 3
+
+    theory_behind_AMfeti.rst
+    feti_solver.rst

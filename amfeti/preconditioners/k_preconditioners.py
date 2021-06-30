@@ -10,7 +10,7 @@ Preconditioning module for AMfeti and linearized systems, that have a K-matrix-l
 static local problem.
 """
 from scipy.sparse import csr_matrix
-from amfeti.linalg import cal_schur_complement, Matrix
+from amfeti.linalg import cal_schur_complement
 from .preconditioner_base import PreconditionerBase
 import numpy as np
 
@@ -36,11 +36,11 @@ class LumpedPreconditioner(PreconditionerBase):
         if self.interior_dofs is None:
             self.interior_dofs = self._identify_interior_dofs(self.interface_dofs)
 
-        return Matrix(self.K.data[np.ix_(self.interface_dofs, self.interface_dofs)])
+        return self.K.matrix[np.ix_(self.interface_dofs, self.interface_dofs)]
 
     def _set_Q(self):
-        self.Q = csr_matrix(np.zeros(self.K.data.shape))
-        self.Q[np.ix_(self.interface_dofs, self.interface_dofs)] = self.K_bb.data
+        self.Q = csr_matrix(np.zeros(self.K.shape))
+        self.Q[np.ix_(self.interface_dofs, self.interface_dofs)] = self.K_bb
 
 
 class SuperLumpedPreconditioner(LumpedPreconditioner):
@@ -52,8 +52,8 @@ class SuperLumpedPreconditioner(LumpedPreconditioner):
         super().__init__()
 
     def _set_Q(self):
-        self.Q = csr_matrix(np.zeros(self.K.data.shape))
-        self.Q[np.ix_(self.interface_dofs, self.interface_dofs)] = np.diag(self.K_bb.data)
+        self.Q = csr_matrix(np.zeros(self.K.shape))
+        self.Q[np.ix_(self.interface_dofs, self.interface_dofs)] = np.diag(self.K_bb)
 
 
 class DirichletPreconditioner(LumpedPreconditioner):
@@ -72,7 +72,7 @@ class DirichletPreconditioner(LumpedPreconditioner):
         if self.interior_dofs is None:
             self.interior_dofs = self._identify_interior_dofs(self.interface_dofs)
 
-        return Matrix(self.K.data[np.ix_(self.interior_dofs, self.interior_dofs)])
+        return self.K.matrix[np.ix_(self.interior_dofs, self.interior_dofs)]
 
     @property
     def K_ib(self):
@@ -82,7 +82,7 @@ class DirichletPreconditioner(LumpedPreconditioner):
         if self.interior_dofs is None:
             self.interior_dofs = self._identify_interior_dofs(self.interface_dofs)
 
-        return Matrix(self.K.data[np.ix_(self.interior_dofs, self.interface_dofs)])
+        return self.K.matrix[np.ix_(self.interior_dofs, self.interface_dofs)]
 
     @property
     def K_bi(self):
@@ -92,7 +92,7 @@ class DirichletPreconditioner(LumpedPreconditioner):
         if self.interior_dofs is None:
             self.interior_dofs = self._identify_interior_dofs(self.interface_dofs)
 
-        return Matrix(self.K.data[np.ix_(self.interface_dofs, self.interior_dofs)])
+        return self.K.matrix[np.ix_(self.interface_dofs, self.interior_dofs)]
 
     def schur_complement(self):
         """
@@ -101,7 +101,7 @@ class DirichletPreconditioner(LumpedPreconditioner):
         return cal_schur_complement(self.K_bi, self.K_ii, self.K_ib, self.K_bb)
 
     def _set_Q(self):
-        self.Q = csr_matrix(np.zeros(self.K.data.shape))
+        self.Q = csr_matrix(np.zeros(self.K.shape))
         S = self.schur_complement()
 
         self.Q[np.ix_(self.interface_dofs, self.interface_dofs)] = S
@@ -119,5 +119,5 @@ class LumpedDirichletPreconditioner(DirichletPreconditioner):
         """
         Caller for a Schur-complement calculation with an extraction of the lumped interior operator matrix
         """
-        K_ii_diag = Matrix(np.diag(self.K_ii.data))
-        return cal_schur_complement(Matrix(self.K_ib.data.T), K_ii_diag, self.K_ib, self.K_bb)
+        K_ii_diag = np.diag(self.K_ii.matrix)
+        return cal_schur_complement(self.K_ib.T, K_ii_diag, self.K_ib, self.K_bb)

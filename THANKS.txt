@@ -7,5 +7,9 @@ Guilherme Jenovencio
 Andreas Seibold
 
 We thank the following contributors:
+Ana Cukarska for substantial contributions to the documentation
+Sivasankar Arul for the global assembly of the interface-operator
+Chaitanya Sanghavi for the implementation of the Orthomin-solver
+
 
 

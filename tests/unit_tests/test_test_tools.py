@@ -79,3 +79,46 @@ class CustomAssertMethodsTest(TestCase):
         dict2 = copy(dict1)
         self.custom_asserter.assert_dict_almost_equal(dict1, dict2)
 
+    def test_assert_dict_keys_equal(self):
+        dict1 = {'key1': np.array([0, 5]),
+                 'key2': {'subkey1': 5,
+                          'subkey2': {'subsubkey1': np.array([6.5, 4.2, 2.1])}},
+                 'key3': 6,
+                 (1, 2): 'value'}
+        dict2 = {'key1': None,
+                 'key2': {'subkey1': None,
+                          'subkey2': {'subsubkey1': None}},
+                 'key3': None,
+                 (1, 2): None}
+
+        self.custom_asserter.assert_dict_keys_equal(dict1, dict2)
+
+    @expectedFailure
+    def test_assert_dict_keys_equal_failure12(self):
+        dict1 = {'key1': np.array([0, 5]),
+                 'key2': {'subkey1': 5,
+                          'subkey2': {'subsubkey1': np.array([6.5, 4.2, 2.1])}},
+                 'key3': 6,
+                 (1, 2): 'value'}
+        dict2 = {'key1': None,
+                 'key2': {'subkey1': None,
+                          'subkey2': None},
+                 'key3': None,
+                 (1, 2): None}
+
+        self.custom_asserter.assert_dict_keys_equal(dict1, dict2)
+
+    @expectedFailure
+    def test_assert_dict_keys_equal_failure21(self):
+        dict1 = {'key1': np.array([0, 5]),
+                 'key2': {'subkey1': 5,
+                          'subkey2': {'subsubkey1': np.array([6.5, 4.2, 2.1])}},
+                 (1, 2): 'value'}
+        dict2 = {'key1': None,
+                 'key2': {'subkey1': None,
+                          'subkey2': {'subsubkey1': np.array([6.5, 4.2, 2.1])}},
+                 'key3': None,
+                 (1, 2): None}
+
+        self.custom_asserter.assert_dict_keys_equal(dict1, dict2)
+

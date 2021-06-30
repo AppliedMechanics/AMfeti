@@ -4,6 +4,8 @@
 #
 # Distributed under 3-Clause BSD license. See LICENSE file for more information.
 #
+import logging
+from collections.abc import Iterable
 import numpy as np
 from os.path import splitext, isfile, join, dirname
 
@@ -60,10 +62,6 @@ def invert_dictionary_with_iterables(dict_map):
     """
 
     def add_new_value_to_key(dictionary, key, value, value_type=None):
-        print(value_type)
-        if value_type not in (np.ndarray, tuple, list, str) and value_type is not None:
-            raise ValueError('Unknown type of value in dictionary, when inverting dictionary.')
-
         if key in dictionary:
             if isinstance(dictionary[key], np.ndarray):
                 dictionary[key] = np.append(dictionary[key], np.array([value], dtype=object))
@@ -86,8 +84,16 @@ def invert_dictionary_with_iterables(dict_map):
 
     dict_map_inv = dict()
     for k, v in dict_map.items():
-        for vi in v:
-            dict_map_inv = add_new_value_to_key(dict_map_inv, vi, k, type(v))
+        if not isinstance(v, Iterable) or type(v) is None:
+            raise ValueError('Unknown type of value in dictionary, when inverting dictionary.')
+        else:
+            if not isinstance(v, (list, str, np.ndarray, tuple)):
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    ["The datatype " + str(type(v)) + " is not explicitly supported and might lead to unexpected "
+                                                      "behaviour."])
+            for vi in v:
+                dict_map_inv = add_new_value_to_key(dict_map_inv, vi, k, type(v))
 
     return dict_map_inv
 

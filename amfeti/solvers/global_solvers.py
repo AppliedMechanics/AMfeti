@@ -17,7 +17,8 @@ from scipy.sparse import csr_matrix, hstack, vstack
 from scipy.sparse.linalg import spsolve
 
 __all__ = ['PCPGsolver',
-           'GMRESsolver']
+           'GMRESsolver',
+           'ORTHOMINsolver']
 
 
 class GlobalSolverBase(ConfigBase):
@@ -109,7 +110,6 @@ class PCPGsolver(GlobalSolverBase):
         k = 0
 
         for k in range(self._config_dict['max_iter']):
-            info_dict[k] = {}
             wk = self._project(rk)
             zk = self._precondition(wk)
             yk = self._project(zk)
@@ -176,8 +176,8 @@ class PCPGsolver(GlobalSolverBase):
         logger.info('#' * 60)
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
-        info_dict['Total_elaspsed_time_PCPG'] = elapsed_time
-        info_dict['PCPG_iterations'] = k + 1
+        info_dict['Total_elaspsed_time'] = elapsed_time
+        info_dict['iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
@@ -277,7 +277,6 @@ class GMRESsolver(PCPGsolver):
         V_stack = csr_matrix(vk_stack)
 
         for k in range(self._config_dict['max_iter']):
-            info_dict[k] = {}
             Fvk = F_callback(V[k])
 
             wk = self._project(Fvk)
@@ -351,8 +350,8 @@ class GMRESsolver(PCPGsolver):
         logger.info('#' * 60)
 
         info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
-        info_dict['Total_elaspsed_time_GMRES'] = elapsed_time
-        info_dict['GMRES_iterations'] = k + 1
+        info_dict['Total_elaspsed_time'] = elapsed_time
+        info_dict['iterations'] = k + 1
         info_dict['lambda_hist'] = lambda_hist
         info_dict['residual_hist'] = residual_hist
         info_dict['residual'] = norm_wk
@@ -360,4 +359,147 @@ class GMRESsolver(PCPGsolver):
         return lambda_sol, info_dict
 
 
+class ORTHOMINsolver(PCPGsolver):
 
+
+    """
+    Orthomin iterative scheme solves generalized linear systems (complex, non-symmetric, badly conditioned) similar to GMRES.
+    Unlike, GMRES, it solves the minimization problem at each step and thus the residual is available at each step. On the other hand,
+    one has to store additional varaibles compared to GMRES.
+    Attributes
+    ----------
+    _config_dict : dict
+        configuration dictionary
+    """
+    def __init__(self):
+        """
+        Parameters
+        ----------
+        None
+        """
+        super().__init__()
+        self._config_dict = {'tolerance': 1e-7,
+                             'max_iter': None,
+                             'projection': None,
+                             'precondition': None,
+                             'energy_norm': False,
+                             'save_history': False}
+
+    def solve(self, F_callback, residual_callback, lambda_init):
+        """
+        Solve-method of the Orthomin-method
+        Parameters
+        ----------
+        F_callback : callable
+            method, that applies the solution-vector on the system-matrix F and returns the result
+        residual_callback : callable
+            method, that calculates and return the system's residual from the solution-vector
+        lambda_init : ndarray
+            initial guess for the solution
+        Returns
+        -------
+        lambda_sol : ndarray
+            calculated solution
+        info_dict : dict
+            general information on the solution-process
+        """
+        logger = logging.getLogger(__name__)
+
+        interface_size = len(lambda_init)
+
+        if self._config_dict['max_iter'] is None:
+            self._config_dict['max_iter'] = int(1 * interface_size)
+
+        logger.info('Setting ORTHOMIN tolerance = %4.2e' % self._config_dict['tolerance'])
+        logger.info('Setting ORTHOMIN max number of iterations = %i' % self._config_dict['max_iter'])
+
+        # initialize variables
+        info_dict = {}
+        global_start_time = time.time()
+        residual_hist = np.array([])
+        lambda_hist = np.array([])
+
+        V = dict()
+        Q = dict()
+
+
+        lambda_sol = np.zeros_like(lambda_init)
+        rk = residual_callback(lambda_init)
+
+        k = 0
+
+        wk = self._project(rk)
+        zk = self._precondition(wk)
+        yk = self._project(zk)
+
+
+        V[0] = yk
+
+
+        q0= F_callback(yk)
+        norm_q0= np.linalg.norm(q0)
+        Q[0] = q0
+
+        for k in range(self._config_dict['max_iter']):
+            info_dict[k] = {}
+            alpha = np.vdot(rk, Q[k]) / np.vdot(Q[k],Q[k])
+            lambda_sol = lambda_sol + V[k] * alpha
+
+            rk =rk - alpha * Q[k]
+
+            wk = self._project(rk)
+            zk = self._precondition(wk)
+            yk = self._project(zk)
+
+            if self._config_dict['save_history']:
+                lambda_hist = np.append(lambda_hist, lambda_sol)
+                residual_hist = np.append(residual_hist, np.linalg.norm(rk))
+                
+
+                norm_wk = np.linalg.norm(rk)
+                if norm_wk <= self._config_dict['tolerance']:
+                    logger.info('Orthomin has converged after %i' % (k + 1))
+                    break
+
+            else:
+                norm_wk = np.linalg.norm(rk)
+                if norm_wk <= self._config_dict['tolerance']:
+                    logger.info('Orthomin has converged after %i' % (k + 1))
+                    break
+
+            eta = F_callback(yk)
+            v_k = yk
+
+
+            for i in range(k+1):
+                beta  = np.vdot(eta, Q[i])/ np.vdot(Q[i],Q[i])
+                v_k = v_k -  beta*V[i]
+                eta = eta -  beta*Q[i]
+
+
+            V[k+1] = v_k
+            Q[k+1] = eta
+
+
+        if (k > 0) and k == (self._config_dict['max_iter'] - 1) and norm_wk > self._config_dict['tolerance']:
+            logger.warning('Maximum iteration was reached, MAX_INT = %i, without converging!' % (k + 1))
+            logger.warning('Projected norm = %2.5e , where the ORTHOMIN tolerance is set to %2.5e' % (
+            norm_wk, self._config_dict['tolerance']))
+
+        elapsed_time = time.time() - global_start_time
+        logger.info('#' * 60)
+        logger.info('{"Total_elaspsed_time_ORTHOMIN" : %2.2f} # Elapsed time [s]' % (elapsed_time))
+        logger.info('Number of ORTHOMIN  Iterations = %i !' % (k + 1))
+        avg_iteration_time = elapsed_time / (k + 1)
+        logger.info('{"avg_iteration_time_ORTHOMIN" : %2.4f} # Elapsed time [s]' % (avg_iteration_time))
+        logger.info('#' * 60)
+
+        info_dict['avg_iteration_time'] = elapsed_time / (k + 1)
+        info_dict['Total_elaspsed_time_ORTHOMIN'] = elapsed_time
+        info_dict['iterations'] = k + 1
+        info_dict['lambda_hist'] = lambda_hist
+        info_dict['residual_hist'] = residual_hist
+        info_dict['residual'] = norm_wk
+        info_dict['F_Proj_search_direction'] = Q
+
+        return lambda_sol, info_dict

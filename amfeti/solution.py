@@ -17,7 +17,6 @@ class SolutionBase:
         self._dual_solution = None
         self._alpha_solution = None
         self._local_problems_dict = dict()
-        self._solver_info_dict = dict()
         self.solver_information = dict()
 
     def update(self, local_problems_dict, dual_solution, alpha_solution, solver_info_dict):

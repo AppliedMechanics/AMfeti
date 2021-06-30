@@ -124,9 +124,11 @@ class LinearDynamicFetiSolver(FetiSolverBase):
         solvers_info_dict = dict()
         while True:
             logger.info('Solving time-step ' + str(t_step))
-            solver_information = self._solver_manager.solve()
-            solvers_info_dict[t_step] = solver_information
-            info_dict = self._solver_manager.update_local_problems(np.zeros(self._dual_solution_length), {}, {})
+            info_dict = self._solver_manager.update_local_problems(np.zeros(self._dual_solution_length),
+                                                                   {'solver_start': True}, {})
+            self._solver_manager.solve()
+            solvers_info_dict[t_step] = copy(self._solver_manager.solution.solver_information)
+            info_dict = self._solver_manager.update_local_problems(np.zeros(self._dual_solution_length), {'solver_start': False}, {})
             problem_id0 = list(info_dict.keys())[0]
             t_array = np.array([])
             for problem_id, local_info_dict in info_dict.items():
@@ -281,10 +283,10 @@ class NonlinearDynamicFetiSolver(LinearDynamicFetiSolver):
         delta_lambda : ndarray
             incremental global solution
         """
-        solver_information = self._solver_manager.solve()
+        self._solver_manager.solve()
         solution = self._solver_manager.solution
         delta_lambda = solution.dual_solution
-        return delta_lambda, solver_information
+        return delta_lambda, solution.solver_information
 
     def _update_residual(self, lamda_alpha, update_input_dict):
         """

@@ -88,6 +88,21 @@ class SerialSolverManager(SolverManagerBase):
     def no_lagrange_multiplier(self):
         return self._global_dof_dimension
 
+    @property
+    def interface_operator(self):
+        """
+        Fully assembled global interface-operator
+        """
+        F_global = csr_matrix((self.no_lagrange_multiplier, self.no_lagrange_multiplier))
+        for problem_id, local_problem in self._local_problems_dict.items():
+            F_local_dict = local_problem.interface_operator
+            for interface_left, F_dict_left in F_local_dict.items():
+                for interface_right, F_obj in F_dict_left.items():
+                    F_global[np.ix_(self._interface2dof_map[interface_left],
+                                    self._interface2dof_map[interface_right])] += F_obj
+
+        return -F_global
+
     def update(self):
         """
         Updates coarse-grid- and solution-object based on the configuration and local problems
@@ -119,7 +134,7 @@ class SerialSolverManager(SolverManagerBase):
             if local_problem.kernel.size == 0:
                 RTf_dict[problem_id] = np.array([])
             else:
-                RTf_dict[problem_id] = local_problem.kernel.T @ local_problem.f
+                RTf_dict[problem_id] = np.asarray(local_problem.kernel.T @ local_problem.f).flatten()
             for interface, B in local_problem.B.items():
                 if interface not in self._interface2dof_map:
                     new_global_dof_dimension = self._global_dof_dimension + B.shape[0]

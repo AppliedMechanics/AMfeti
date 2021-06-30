@@ -71,7 +71,9 @@ class LinearStaticLocalProblem(LocalProblemBase):
         if isinstance(K, Matrix):
             self.K = K
         else:
-            self.K = Matrix(K, pseudoinverse_kargs=self._config_dict['pseudoinverse_config'])
+            pseudoinverse_options = self._config_dict['pseudoinverse_config']
+            self.K = Matrix(K, pseudoinverse_method=pseudoinverse_options['method'],
+                            pseudoinverse_tol=pseudoinverse_options['tolerance'])
 
         self.f = f
 
@@ -118,6 +120,28 @@ class LinearStaticLocalProblem(LocalProblemBase):
             kernel of the stiffness matrix
         """
         return self.K.kernel
+
+    @property
+    def interface_operator(self):
+        """
+        Assembles the local contributions to a global interface-operator
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        interface_operator_dict : dict
+            dictionary of local contributions to the global interface-operator
+        """
+        F_dict = dict()
+        for interface_id_left, B_left in self.B.items():
+            F_dict_right = dict()
+            for interface_id_right, B_right in self.B.items():
+                F_dict_right[interface_id_right] = B_left @ self.K.inverse @ B_right.T
+            F_dict[interface_id_left] = F_dict_right
+        return F_dict
 
     def set_config(self, new_config_dict):
         """
@@ -188,7 +212,7 @@ class LinearStaticLocalProblem(LocalProblemBase):
 
         q = self.K.apply_inverse(f)
         if rigid_body_modes is not None and rigid_body_modes.size is not 0:
-            q += self.K.kernel.dot(rigid_body_modes)
+            q += np.asarray(self.K.kernel.dot(rigid_body_modes)).flatten()
         if external_force_bool:
             self.q = q
 
@@ -367,8 +391,7 @@ class NonlinearStaticLocalProblem(LinearStaticLocalProblem):
         self.q += self.delta_q
         self.lamda = self._expand_external_solution(external_solution_dict)
         self.f = self._load_factor * self.f_ext_callback(self.q) - self.lamda
-        self.K.data = self.K_callback(self.q)
-        self.K.inverse_computed = False
+        self.K.update(self.K_callback(self.q))
         self.update_preconditioner_and_scaling()
 
     def dump_local_information(self):
@@ -413,7 +436,7 @@ class NonlinearStaticLocalProblem(LinearStaticLocalProblem):
 
         q = self.K.apply_inverse(f)
         if rigid_body_modes is not None and rigid_body_modes.size is not 0:
-            q += self.K.kernel.dot(rigid_body_modes)
+            q += np.asarray(self.K.kernel.dot(rigid_body_modes)).flatten()
         self.delta_q = copy(q)
         if external_force_bool:
             q += self.q

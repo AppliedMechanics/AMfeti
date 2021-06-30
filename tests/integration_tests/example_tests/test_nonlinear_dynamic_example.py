@@ -53,7 +53,10 @@ class NonlinearDynamicExampleTest(ExampleTestBase):
                                                 deepcopy(self.q_0_dict), deepcopy(self.q_0_dict),
                                                 deepcopy(self.q_0_dict), use_parallel=False,
                                        loadpath_controller_options = {'nonlinear_solver_options': {'atol': 1.0e-6,
-                                                                                                   'rtol': 1.0e-9},
+                                                                                                   'rtol': 1.0e-9,
+                                                                                                   'max_iter': 10,
+                                                                                                   'log_iterations': True
+                                                                                                   },
                                                                       'N_steps': 1}, global_solver=solver)
         fetisolver.update()
 
@@ -72,6 +75,34 @@ class NonlinearDynamicExampleTest(ExampleTestBase):
         self.custom_asserter.decimals = 2
         self.custom_asserter.assert_dict_almost_equal(ddq_dict_serial, self.ddq_dict_desired)
 
+        info_dict_keys_desired = dict()
+        for tstep in range(0, 3):
+            loadstep_dict_keys_desired = dict()
+            for lstep in range(0, 1):
+                linear_solver_dict = dict()
+                if lstep is 0:
+                    linear_solver_dict[0] = {'avg_iteration_time': None,
+                                             'Total_elaspsed_time': None,
+                                             'iterations': None,
+                                             'lambda_hist': None,
+                                             'residual_hist': None,
+                                             'residual': None}
+                elif lstep > 0:
+                    for newton_iter in range(0, 10):
+                        linear_solver_dict[newton_iter] = {'avg_iteration_time': None,
+                                                           'Total_elaspsed_time': None,
+                                                           'iterations': None,
+                                                           'lambda_hist': None,
+                                                           'residual_hist': None,
+                                                           'residual': None}
+                loadstep_dict_keys_desired[lstep] = {'newton': {'residual': None,
+                                                            'linear_solver': linear_solver_dict,
+                                                            'iterations': None
+                                                            }}
+            info_dict_keys_desired[tstep] = loadstep_dict_keys_desired
+
+        self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
+
     def test_parallel_solver(self):
         if self.run_parallel_tests:
             solver = PCPGsolver()
@@ -81,7 +112,9 @@ class NonlinearDynamicExampleTest(ExampleTestBase):
                                                     deepcopy(self.q_0_dict), use_parallel=True,
                                                     loadpath_controller_options={
                                                         'nonlinear_solver_options': {'atol': 1.0e-6,
-                                                                                     'rtol': 1.0e-9},
+                                                                                     'rtol': 1.0e-9,
+                                                                                     'max_iter': 10,
+                                                                                     'log_iterations': True},
                                                         'N_steps': 1}, global_solver=solver)
             # If 6 processors are available, the following 6 lines can be omitted
             mpi_manager = MPIManager()
@@ -109,6 +142,34 @@ class NonlinearDynamicExampleTest(ExampleTestBase):
             self.custom_asserter.assert_dict_almost_equal(dq_dict_parallel, self.dq_dict_desired)
             self.custom_asserter.decimals = 2
             self.custom_asserter.assert_dict_almost_equal(ddq_dict_parallel, self.ddq_dict_desired)
+
+            info_dict_keys_desired = dict()
+            for tstep in range(0, 3):
+                loadstep_dict_keys_desired = dict()
+                for lstep in range(0, 1):
+                    linear_solver_dict = dict()
+                    if lstep is 0:
+                        linear_solver_dict[0] = {'avg_iteration_time': None,
+                                                 'Total_elaspsed_time': None,
+                                                 'iterations': None,
+                                                 'lambda_hist': None,
+                                                 'residual_hist': None,
+                                                 'residual': None}
+                    elif lstep > 0:
+                        for newton_iter in range(0, 10):
+                            linear_solver_dict[newton_iter] = {'avg_iteration_time': None,
+                                                               'Total_elaspsed_time': None,
+                                                               'iterations': None,
+                                                               'lambda_hist': None,
+                                                               'residual_hist': None,
+                                                               'residual': None}
+                    loadstep_dict_keys_desired[lstep] = {'newton': {'residual': None,
+                                                                    'linear_solver': linear_solver_dict,
+                                                                    'iterations': None
+                                                                    }}
+                info_dict_keys_desired[tstep] = loadstep_dict_keys_desired
+
+            self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
         else:
             logger = logging.getLogger(__name__)
             logger.warning('Parallel test has not been run. If parallel tests shall be run, switch on the '

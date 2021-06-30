@@ -39,7 +39,7 @@ class ParallelizationManagerBase(ConfigBase):
         super().__init__()
         self.set_config({'tmp_folder': 'tmp',
                          'tmp_folder_absolute': None,
-                         'remove_tmp': True})
+                         'remove_tmp': False})
         self._launcher_script_path = None
         self._local_folder = None
 

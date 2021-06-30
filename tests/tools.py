@@ -84,3 +84,33 @@ class CustomDictAssertTest(TestCase):
             self._recursion_counter = 0
         else:
             raise RuntimeError('Recursion stopped to avoid infinite loops')
+
+    def assert_dict_keys_equal(self, dict1, dict2):
+        """
+        Test if the keys of two dictionaries are equal. The content of the dictionaries is not tested.
+
+        Parameters
+        ----------
+        dict1 : dict
+            First dictionary for comparison
+        dict2 : dict
+            Second dictionary for comparison
+
+        Return
+        ------
+        None
+        """
+        self._recursion_counter += 1
+        if self._recursion_counter <= self.max_recursions:
+            for key, value in dict1.items():
+                self.assertTrue(key in dict2.keys())
+                if isinstance(value, dict):
+                    self.assert_dict_keys_equal(value, dict2[key])
+
+            for key, value in dict2.items():
+                self.assertTrue(key in dict1.keys())
+                if isinstance(value, dict):
+                    self.assert_dict_keys_equal(value, dict1[key])
+            self._recursion_counter = 0
+        else:
+            raise RuntimeError('Recursion stopped to avoid infinite loops')

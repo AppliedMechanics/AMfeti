@@ -44,7 +44,7 @@ class PreconditionerBaseTest(TestCase):
 
         preconditioner_test.update(newK, new_interface_dofs)
 
-        assert_array_equal(preconditioner_test.K.data.todense(), newK.data.todense())
+        assert_array_equal(preconditioner_test.K.matrix.todense(), newK.matrix.todense())
         assert_array_equal(preconditioner_test.interface_dofs, new_interface_dofs)
 
 

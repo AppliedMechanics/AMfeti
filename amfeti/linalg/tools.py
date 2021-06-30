@@ -5,23 +5,25 @@
 # Distributed under 3-Clause BSD license. See LICENSE file for more information.
 #
 
-from scipy.sparse.linalg import spsolve, splu, spsolve_triangular
-from scipy.sparse import csc_matrix, diags, lil_matrix, issparse
+from scipy.sparse.linalg import spsolve, spsolve_triangular
+from scipy.sparse import csr_matrix, lil_matrix, eye, diags, issparse, vstack, hstack
 from scipy.linalg import orth
 import logging
 import numpy as np
+from numpy.linalg import cholesky
+from copy import copy
 
 
 __all__ = ['cal_schur_complement',
-           'splusps',
-           'cholsps']
+           'pinv_and_null_space_svd',
+           'qrfullsps']
 
 
 def cal_schur_complement(K_bi, K_ii, K_ib, K_bb):
     try:
-        lu_Kib = spsolve(K_ii.data, K_ib.data)
+        lu_Kib = spsolve(K_ii, K_ib)
 
-        return K_bb.data - K_bi.dot(lu_Kib)
+        return K_bb - K_bi @ lu_Kib
     except MemoryError:
         logger = logging.getLogger(__name__)
         logger.error('Memory error during Schur-complement calculations')
@@ -30,166 +32,142 @@ def cal_schur_complement(K_bi, K_ii, K_ib, K_bb):
         raise Exception('Exception occurs during Schur-complement calculations')
 
 
-def splusps(A, tol=1.0e-6):
-    ''' This method return the upper traingular matrix based on superLU of A.
-    This function works for positive semi-definite matrix.
-    This functions also return the null space of the matrix A.
-    Input:
+def qrfullsps(K):
+    """
+    Full QR-factorization for a sparse potentially singular mxn matrix, with m>=n.
 
-        A -> positive semi-definite matrix
-        tol -> tolerance for small pivots
+    Parameters
+    ----------
+    K : ndarray
+        matrix, that is to be inverted
 
-    Ouputs:
-        U -> upper triangule of Cholesky decomposition
-        idp -> list of non-zero pivot rows
-        R -> matrix with bases of the null space
-    '''
-    [n, m] = np.shape(A)
-
-    if n != m:
-        print('Matrix is not square')
-        return
-
-    idp = []  # id of non-zero pivot columns
-    idf = []  # id of zero pivot columns
-
-    if not isinstance(A, csc_matrix):
-        A = csc_matrix(A)
-
-    A_diag = A.diagonal()
-    Atrace = A_diag.sum()
-    avg_diag_A = A_diag / Atrace
-
-    try:
-        # apply small perturbation in diagonal
-        lu = splu(A, options={'DiagPivotThresh': 0.0, 'SymmetricMode': True})
-        logging.info('Standard SuperLU.')
-    except:
-        B = A.tolil()
-        B += 1.0E-15 * avg_diag_A * diags(np.ones(n))
-        A = B.tocsc()
-        del B
-        lu = splu(A, options={'DiagPivotThresh': 0.0, 'SymmetricMode': True})
-        logging.info('Perturbed SuperLU.')
-
-    U = lu.U
-    Pc = lil_matrix((n, n))
-    Pc[np.arange(n), lu.perm_c] = 1
-
-    U_diag = U.diagonal()
-    Utrace = U_diag.sum()
-    diag_U = U_diag / Utrace
-
-    idf = np.where(abs(diag_U) < tol)[0].tolist()
-
-    if len(idf) > 0:
-        R = _calc_null_space_of_upper_trig_matrix(U, idf)
-        R = Pc.dot(R)
-    else:
-        R = np.array([])
-
-    return lu, idf, R
-
-
-def cholsps(A, tol=1.0e-8):
-    ''' This method return the upper traingular matrix of cholesky decomposition of A.
-    This function works for positive semi-definite matrix.
-    This functions also return the null space of the matrix A.
-    Input:
-
-        A -> positive semi-definite matrix
-        tol -> tolerance for small pivots
-
-    Ouputs:
-        U -> upper triangule of Cholesky decomposition
-        idp -> list of non-zero pivot rows
-        R -> matrix with bases of the null space
-
-    '''
-    [n, m] = np.shape(A)
-
-    if n != m:
-        print('Matrix is not square')
-        return
-
-    L = np.zeros([n, n])
-    # L = sparse.lil_matrix((n,n),dtype=float)
-    # A = sparse.csr_matrix(A)
-    idp = []  # id of non-zero pivot columns
-    idf = []  # id of zero pivot columns
-
-    if issparse(A):
-        Atrace = np.trace(A.A)
-        A = A.todense()
-    else:
-        Atrace = np.trace(A)
-
-    tolA = tol * Atrace / n
-
-    for i in range(n):
-        Li = L[i, :]
-        Lii = A[i, i] - np.dot(Li, Li)
-        if Lii > tolA:
-            L[i, i] = np.sqrt(Lii)
-            idp.append(i)
-        elif abs(Lii) < tolA:
-            L[i, i] = 0.0
-            idf.append(i)
-
-        elif Lii < -tolA:
-            logging.debug('Matrix is not positive semi-definite.' + \
-                          'Given tolerance = %2.5e' % tol)
-            return L, [], None
-
-        for j in range(i + 1, n):
-            if L[i, i] > tolA:
-                L[j, i] = (A[j, i] - np.dot(L[i, :], L[j, :])) / L[i, i]
-
-    # finding the null space
-    rank = len(idp)
-    rank_null = n - rank
-
-    U = L.T
-    R = None
-    if rank_null > 0:
-        Im = np.eye(rank_null)
-
-        # Applying permutation to get an echelon form
-
-        PA = np.zeros([n, n])
-        PA[:rank, :] = U[idp, :]
-        PA[rank:, :] = U[idf, :]
-
-        # creating block matrix
-        A11 = np.zeros([rank, rank])
-        A12 = np.zeros([rank, rank_null])
-
-        A11 = PA[:rank, idp]
-        A12 = PA[:rank, idf]
-
-        R11 = np.zeros([rank, rank_null])
-        R = np.zeros([n, rank_null])
-
-        # backward substitution
-        for i in range(rank_null):
-            for j in range(rank - 1, -1, -1):
-                if j == rank - 1:
-                    R11[j, i] = -A12[j, i] / A11[j, j]
+    Returns
+    -------
+    Kinv : ndarray
+        pseudoinverse of K
+    R : ndarray
+        left nullspace of K
+    """
+    R = copy(K)
+    Q = csr_matrix(eye(K.shape[0]))
+    for j in range(K.shape[1]):
+        G = None
+        for k in range(K.shape[0]-1, j, -1):
+            vec_norm = np.linalg.norm(np.array([R[j, j], R[k, j]]))
+            if not np.isclose(vec_norm, 0):
+                c_j = R[j, j] / vec_norm
+                s_j = R[k, j] / vec_norm
+                G_help = csr_matrix(eye(K.shape[0]))
+                G_help[j, j] = c_j
+                G_help[k, j] = -s_j
+                G_help[j, k] = s_j
+                G_help[k, k] = c_j
+                R = G_help @ R
+                if G is None:
+                    G = copy(G_help)
                 else:
-                    R11[j, i] = (-A12[j, i] - np.dot(R11[j + 1:rank, i], A11[j, j + 1:rank])) / A11[j, j]
+                    G = G_help @ G
+        if G is not None:
+            Q = Q @ G.T
+    Q = -Q
+    R = -R
 
-        # back to the original bases
-        R[idf, :] = Im
-        R[idp, :] = R11
+    r_row_sum = np.sum(np.abs(R), axis=1)
+    tol = 1.0e-12
+    rank = K.shape[0] - len(np.where(r_row_sum < tol)[0])
 
-        logging.debug('Null space size = %i' % len(idf))
+    Q1 = Q[:, :rank]
+    Q2 = Q[:, rank:]
 
-    return U, idf, R
+    R1 = R[:rank, :rank]
+    R2 = R[:rank, :rank]
+
+    # Inverting R1 by back substitution
+    if R1.shape[0] == R1.shape[1]:
+        R_inv = csr_matrix(R1.shape)
+        backward_substitution_failed = False
+        for row in np.arange(R1.shape[0]-1, -1, -1):
+            if row is not R1.shape[0]-1:
+                for col in np.arange(row+1, R1.shape[1]):
+                    R_inv[row, :] -= R1[row, col] * R_inv[col, :]
+            R_inv[row, row] = 1
+            if np.isclose(R1[row, row], 0):
+                backward_substitution_failed = True
+                break
+            else:
+                R_inv[row, :] = R_inv[row, :] / R1[row, row]
+    else:
+        backward_substitution_failed = True
+    if backward_substitution_failed:
+        R_inv = csr_matrix(np.linalg.pinv(R.todense()))
+
+    K_inv = R_inv @ Q1.T
+    if K_inv.shape[0] < K.shape[1]:
+        K_inv = vstack((K_inv, lil_matrix((K.shape[1]-K_inv.shape[0], K.shape[1]))))
+    if K_inv.shape[1] < K.shape[0]:
+        K_inv = hstack((K_inv, lil_matrix((K_inv.shape[0], K.shape[0]-K_inv.shape[1]))))
+
+    return K_inv, Q2
+
+
+def pinv_and_null_space_svd(K, tol=1.0E-12):
+    """
+    calculate pseudoinverve and nullspace using SVD method
+
+    Parameters
+    ----------
+    K : ndarray
+        matrix, that is to be inverted
+    tol : float
+        tolerance for the SVD
+
+    Returns
+    -------
+    Kinv : ndarray
+        pseudoinverse of K
+    R : ndarray
+        left nullspace of K
+    """
+    if issparse(K):
+        K = K.todense()
+
+    U, vals, Vt = np.linalg.svd(K)
+
+    inv_vals = np.array([])
+    zero_idxs = np.array([], dtype=np.int)
+    nonzero_idxs = np.array([], dtype=np.int)
+    for idx, val in enumerate(vals):
+        if val / vals[0] > tol:
+            inv_vals = np.append(inv_vals, 1.0 / val)
+            nonzero_idxs = np.append(nonzero_idxs, idx)
+        else:
+            zero_idxs = np.append(zero_idxs, idx)
+
+    invvals_diag = diags(inv_vals)
+    if invvals_diag.shape[1] < U.shape[1]:
+        U_inv = U[np.ix_(np.arange(U.shape[0]), nonzero_idxs)]
+    else:
+        U_inv = U
+    if invvals_diag.shape[0] < Vt.T.shape[1]:
+        Vt_null = Vt[np.ix_(zero_idxs, np.arange(Vt.shape[1]))]
+        Vt_null = Vt_null.T
+        U_null = U[np.ix_(np.arange(U.shape[0]), zero_idxs)]
+        Vt_inv = Vt[np.ix_(nonzero_idxs, np.arange(Vt.shape[1]))]
+    else:
+        Vt_null = np.array([])
+        U_null = np.array([])
+        Vt_inv = Vt
+
+    Kinv = Vt_inv.T @ invvals_diag @ U_inv.T
+
+    R = U_null
+
+    return Kinv, R
 
 
 def _calc_null_space_of_upper_trig_matrix(U, idf=None, orthonormal=True):
-    ''' This function computer the Null space of
-    a Upper Triangule matrix which is can be a singular
+    ''' This function computes the null space of
+    a Upper Triangular matrix which can be a singular
     matrix
 
     argument

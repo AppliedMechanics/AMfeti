@@ -52,6 +52,31 @@ class NonlinearStaticExampleTest(ExampleTestBase):
 
         self.custom_asserter.assert_dict_almost_equal(q_dict_serial, self.q_dict_desired)
 
+        info_dict_keys_desired = dict()
+        for tstep in range(0, 10):
+            linear_solver_dict = dict()
+            if tstep is 0:
+                linear_solver_dict[0] = {'avg_iteration_time': None,
+                                                   'Total_elaspsed_time': None,
+                                                   'iterations': None,
+                                                   'lambda_hist': None,
+                                                   'residual_hist': None,
+                                                   'residual': None}
+            elif tstep > 0:
+                for newton_iter in range(0, 10):
+                    linear_solver_dict[newton_iter] = {'avg_iteration_time': None,
+                                                         'Total_elaspsed_time': None,
+                                                         'iterations': None,
+                                                         'lambda_hist': None,
+                                                         'residual_hist': None,
+                                                         'residual': None}
+            info_dict_keys_desired[tstep] = {'newton': {'residual': None,
+                                                             'linear_solver': linear_solver_dict,
+                                                             'iterations': None
+                                                             }}
+
+        self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
+
     def test_parallel_solver(self):
         if self.run_parallel_tests:
             fetisolver = NonlinearStaticFetiSolver(deepcopy(self.K_dict), deepcopy(self.B_dict),
@@ -76,6 +101,31 @@ class NonlinearStaticExampleTest(ExampleTestBase):
                 q_dict_parallel[problem_id] = problem.q
 
             self.custom_asserter.assert_dict_almost_equal(q_dict_parallel, self.q_dict_desired)
+
+            info_dict_keys_desired = dict()
+            for tstep in range(0, 10):
+                linear_solver_dict = dict()
+                if tstep is 0:
+                    linear_solver_dict[0] = {'avg_iteration_time': None,
+                                             'Total_elaspsed_time': None,
+                                             'iterations': None,
+                                             'lambda_hist': None,
+                                             'residual_hist': None,
+                                             'residual': None}
+                elif tstep > 0:
+                    for newton_iter in range(0, 10):
+                        linear_solver_dict[newton_iter] = {'avg_iteration_time': None,
+                                                           'Total_elaspsed_time': None,
+                                                           'iterations': None,
+                                                           'lambda_hist': None,
+                                                           'residual_hist': None,
+                                                           'residual': None}
+                info_dict_keys_desired[tstep] = {'newton': {'residual': None,
+                                                            'linear_solver': linear_solver_dict,
+                                                            'iterations': None
+                                                            }}
+
+            self.custom_asserter.assert_dict_keys_equal(solution_obj.solver_information, info_dict_keys_desired)
         else:
             logger = logging.getLogger(__name__)
             logger.warning('Parallel test has not been run. If parallel tests shall be run, switch on the '

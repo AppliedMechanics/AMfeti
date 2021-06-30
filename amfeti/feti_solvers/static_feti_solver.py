@@ -167,10 +167,10 @@ class NonlinearStaticFetiSolver(LinearStaticFetiSolver):
             self._local_problems[problem_id].update_preconditioner_and_scaling()
 
     def _solve_linear_problem_callback(self):
-        solver_information = self._solver_manager.solve()
+        self._solver_manager.solve()
         solution = self._solver_manager.solution
         delta_lambda = solution.dual_solution
-        return delta_lambda, solver_information
+        return delta_lambda, solution.solver_information
 
     def _update_residual(self, lamda_alpha, update_input_dict):
         lamda = lamda_alpha

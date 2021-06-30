@@ -139,13 +139,15 @@ class LinearDynamicLocalProblem(LinearStaticLocalProblem):
         -------
         None
         """
-        self._dq_p += self._delta_dq
-        self._integrator.set_correction(self._dq_p)
-        self._store_solutions(self._integrator.t_p, self._integrator.q_p, self._integrator.dq_p, self._integrator.ddq_p)
-        N_timesteps = len(self.t)-1
-        self._integrator.set_prediction(self.q[N_timesteps], self.dq[N_timesteps], self.ddq[N_timesteps],
-                                        self.t[N_timesteps])
-        self.f = -self._integrator.residual_int(self._dq_p) - self._integrator.residual_ext(self._dq_p)
+        if update_input_dict['solver_start']:
+            N_timesteps = len(self.t)-1
+            self._integrator.set_prediction(self.q[N_timesteps], self.dq[N_timesteps], self.ddq[N_timesteps],
+                                            self.t[N_timesteps])
+            self.f = -self._integrator.residual_int(self._dq_p) - self._integrator.residual_ext(self._dq_p)
+        else:
+            self._dq_p += self._delta_dq
+            self._integrator.set_correction(self._dq_p)
+            self._store_solutions(self._integrator.t_p, self._integrator.q_p, self._integrator.dq_p, self._integrator.ddq_p)
 
     def dump_local_information(self):
         """
@@ -260,8 +262,7 @@ class NonlinearDynamicLocalProblem(LinearDynamicLocalProblem):
             self._integrator.set_correction(self._dq_p)
             self.lamda = self._expand_external_solution(external_solution_dict)
             self.f = -self.residual
-            self.K.data = self._integrator.jacobian(self._dq_p)
-            self.K.inverse_computed = False
+            self.K.update(self._integrator.jacobian(self._dq_p))
             self.update_preconditioner_and_scaling()
 
     def dump_local_information(self):

@@ -3,14 +3,13 @@ Table of Contents
 *****************
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 3
 
    chapters/getting_started/index
    chapters/fundamentals/index
-   chapters/examples/index
+   chapters/implementation_details/index
    Package <chapters/package_doc/index>
    release/index
-   notes
 
 ******************
 Indices and tables

@@ -2,7 +2,11 @@
 Implementation Details and Requirements
 ***************************************
 
-.. comment::
-    .. toctree::
+.. _implementation_details_and_requirements:
 
-        time-integration
+.. toctree::
+    :maxdepth: 3
+
+    time-integration.rst
+    integrator-class.rst
+    parallelization.rst

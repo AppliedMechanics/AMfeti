@@ -23,7 +23,7 @@ amfeti.coarse_grid improvements
 
 
 amfeti.config_base improvements
--------------------------
+--------------------------------
 
 - Generalized configuration-management in ConfigBase-class
 
@@ -90,7 +90,7 @@ amfeti.solvers improvements
 - PCPG refactored
 - PCPG supports full reorthogonalization
 - Added GMRES
-
+- Added ORTHOMIN
 
 amfeti.tools improvements
 -------------------------

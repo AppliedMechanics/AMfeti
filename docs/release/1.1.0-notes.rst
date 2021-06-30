@@ -1,0 +1,104 @@
+==========================
+AMfeti 1.1.0 Release Notes
+==========================
+
+
+Highlights of this release
+--------------------------
+
+
+New features
+============
+
+amfeti.feti_solvers improvements
+--------------------------------
+
+- Fixed export of solver-information-dictionaries
+
+
+amfeti.local_problems improvements
+----------------------------------
+
+- Introduced control-tag to update_system-method of LinearDynamicLocalProblem for the order of storing solutions and
+    integrator-methods
+- Added local contributions to global interface-operator as property
+
+
+amfeti.solver_managers
+----------------------
+
+- Added assembled global interface-operator to serial-solver-manager as property
+
+
+amfeti.solvers improvements
+---------------------------
+
+- Added GMRES
+
+
+amfeti.linalg improvements
+--------------------------
+
+- Refactored Matrix- and Pseudoinverse-classes and their APIs
+- Added 'update'-method to Matrix-class, that updates the matrix-content
+- Added full QR-decomposition for sparse singular matrices
+
+
+tests.tools
+-----------
+
+- added assert_dict_keys_equal-method to CustomDictAssertTest-class, that checks, if keys of two dictionaries are equal
+
+
+Deprecated features
+===================
+
+amfeti.linalg
+-------------
+
+- Removed Vector- and Sparse-Matrix-classes, as they were no longer used
+- Removed unused methods 'calc_kernel_correction', 'check_null_space' and 'has_solution' from Pseudoinverse-class
+- Removed unused methods 'set_psudeoinverve_alg', 'update_name', 'get_block', 'eliminate_by_identity' and 'save_to_file'
+- Removed untested solver methods LU- and Cholesky-decomposition from linalg-module
+
+
+Backwards incompatible changes
+==============================
+
+
+Documentation changes
+=====================
+
+Getting Started chapter
+_______________________
+
+- Added a pre-installation, installation and post-installation guide.
+- Added a general guide on how to use AMfeti.
+
+Fundamentals chapter
+____________________
+
+- Extended and restructured the theory behind AMfeti
+- Added a description of the FETI solver
+
+Examples chapter
+________________
+
+- Added example scripts along with corresponding mesh files
+- Added a step-by-step description of the solution process for different types of problems with AMfeti
+
+Implementation Details chapter
+_______________________________
+
+- Added parallelization implementation details
+- Added an explanation of the integrator class
+
+Package Documentation
+---------------------
+- Added links to modules for docstrings
+- Fixed compilation bug of package-documentation
+
+Other changes
+=============
+- Typo fix in Readme for mpi4py
+- Added tests for the local and parallel solver manager

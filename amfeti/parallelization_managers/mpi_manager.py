@@ -104,7 +104,7 @@ class MPIManager(ParallelizationManagerBase):
             path = os.path.join(self._config_dict['solution_path'], self._path_prefix) + str(rank_id) + '_solution' + \
                    self._file_extension
             solution[rank_id] = load_object(path)
-        logger.debug('Solution readed')
+        logger.debug('Solution read')
         return solution
 
     def load_local_problems(self):

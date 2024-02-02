@@ -172,17 +172,14 @@ in your console.
 Theory behind AMfeti
 --------------------
 ## Solving with Dual Assembly
-The AMfeti library is intend to provide easy functions in order to solve, the dual assembly problem, namely:
+The AMfeti library is intended to provide easy functions in order to solve, the dual assembly problem, namely:
 
 
 $$
 \begin{bmatrix} K & B^{T} \\
                  B & 0  
-\end{bmatrix}
-\begin{bmatrix} q \\ 
-\lambda \end{bmatrix}
-=
-\begin{bmatrix} f \\ 
+\end{bmatrix} \begin{bmatrix} q \\ 
+\lambda \end{bmatrix} = \begin{bmatrix} f \\ 
 0 \end{bmatrix}
 $$
 
@@ -194,12 +191,9 @@ $$
 \begin{bmatrix} K & B^TG^{T} & B^{T} \\
                 GB & 0 & 0   \\
                 B & 0 & 0   \\
-\end{bmatrix}
-\begin{bmatrix} q \\ 
+\end{bmatrix} \begin{bmatrix} q \\ 
 \alpha \\
-\lambda \end{bmatrix}
-=
-\begin{bmatrix} f \\ 
+\lambda \end{bmatrix} = \begin{bmatrix} f \\ 
 0 \\
 0 \end{bmatrix}
 $$
@@ -208,38 +202,40 @@ Where $G$ is defined as $-R^TB^T$.
 
 The Dual Assembly system of equation described above can be separated into two equations.
 
+$$
 \begin{equation}
 Kq + B^{T}\lambda  = f \\
 Bu = 0 
 \end{equation}
+$$
 
 Then, the solution u can be calculated by:
 
+$$
 \begin{equation}
 u =  K^*(B^{T}\lambda  + f) +  R\alpha \\
 \end{equation}
+$$
 
-Where $K^*$ is the generelized pseudo inverse and $R$ is $Null(K) = \{r \in R: Kr=0\}$, named the kernel of the K matrix.
+Where $K^*$ is the generalized pseudo inverse and $R$ is $Null(K) = \{r \in R: Kr=0\}$, named the kernel of the K matrix.
 In order to solve for $u$ the summation of all forces in the subdomain, interface, internal and extenal forces must be 
-in the image of K. This implies the $(B^{T}\lambda  + f)$ must be orthonal to the null space of K.
+in the image of K. This implies the $(B^{T}\lambda  + f)$ must be orthogonal to the null space of K.
 
+$$
 \begin{equation}
 R(B^{T}\lambda  + f) = 0 \\
 \end{equation}
+$$
 
-Phisically, the equation above enforces the self-equilibrium for each sub-domain. Using the compatibility equation and 
+Physically, the equation above enforces the self-equilibrium for each sub-domain. Using the compatibility equation and 
 the self-equilibrium equation, we can write the dual interface equilibrium equation as:
-
 
 $$
 \begin{bmatrix} F & G^{T} \\
                  G & 0  
-\end{bmatrix}
-\begin{bmatrix} \lambda  \\ 
+\end{bmatrix} \begin{bmatrix} \lambda  \\ 
 \alpha
-\end{bmatrix}
-=
-\begin{bmatrix} d \\ 
+\end{bmatrix} = \begin{bmatrix} d \\ 
 e \end{bmatrix}
 $$
 

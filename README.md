@@ -172,7 +172,7 @@ in your console.
 Theory behind AMfeti
 --------------------
 ## Solving with Dual Assembly
-The AMfeti library is intend to provide easy functions in order to solve, the dual assembly problem, namely:
+The AMfeti library is intended to provide easy functions in order to solve, the dual assembly problem, namely:
 
 
 $$
@@ -219,7 +219,7 @@ $$
 
 Where $K^*$ is the generalized pseudo inverse and $R$ is $Null(K) = \{r \in R: Kr=0\}$, named the kernel of the K matrix.
 In order to solve for $u$ the summation of all forces in the subdomain, interface, internal and extenal forces must be 
-in the image of K. This implies the $(B^{T}\lambda  + f)$ must be orthonal to the null space of K.
+in the image of K. This implies the $(B^{T}\lambda  + f)$ must be orthogonal to the null space of K.
 
 $$
 \begin{equation}
